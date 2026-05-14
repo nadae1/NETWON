@@ -1,0 +1,29 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block body %}
+<div class="container mx-auto p-6">
+    <div class="bg-white rounded-lg shadow p-6">
+        <h1>Déploiement – WO IP {{ task.woIpReference }}</h1>
+        <p>Site(s) : ...</p>
+        <form method="post" action="{{ path('user_task_complete', {id: task.id}) }}">
+            <div class="mb-3">
+                <label><input type="checkbox" name="planif"> Planification intervention (date prévue)</label>
+            </div>
+            <div class="mb-3">
+                <label><input type="checkbox" name="radio"> Support Radio contacté et OK</label>
+            </div>
+            <div class="mb-3">
+                <label><input type="checkbox" name="backhaul"> Support Backhaul contacté et OK</label>
+            </div>
+            <div class="mb-3">
+                <label><input type="checkbox" name="exec"> Action réalisée sur site</label>
+            </div>
+            <div class="mb-3">
+                <label><input type="checkbox" name="test"> Tests post-intervention OK</label>
+            </div>
+            <textarea name="comment" class="w-full border p-2"></textarea>
+            <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded">Terminer et retour à l’ingénierie IP</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

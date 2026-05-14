@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetWON Dashboard</title>
+    <link rel="stylesheet" href="{{ asset('assets/css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/workflow.css') }}">
+</head>
+<body>
+{% set currentRoute = app.request.attributes.get('_route') %}
+
+<div class="dashboard-page">
+    <header class="topbar">
+        <div class="topbar-inner">
+            <div class="brand-row">
+                <div class="brand-left">
+                    <img src="{{ asset('images/logo-won.jpeg') }}" alt="NetWON" class="brand-logo">
+                </div>
+
+                <div class="user-badge">
+                    <span class="user-dot"></span>
+                    <span>{{ app.user ? app.user.userIdentifier : 'Utilisateur' }}</span>
+                </div>
+            </div>
+
+            <nav class="navbar-menu">
+                <div class="brand-left">
+                    <img src="{{ asset('images/logo-won.jpeg') }}" alt="NetWON" class="brand-logo">
+                </div>
+
+                {% if is_granted('ROLE_ADMIN') %}
+                    <a class="nav-link {{ currentRoute == 'admin_dashboard_home' ? 'active' : '' }}" href="{{ path('admin_dashboard_home') }}">Home</a>
+                    <a class="nav-link {{ currentRoute == 'admin_dashboard_export' ? 'active' : '' }}" href="{{ path('admin_dashboard_export') }}">Export</a>
+                    <a class="nav-link {{ currentRoute == 'admin_dashboard_kpis' ? 'active' : '' }}" href="{{ path('admin_dashboard_kpis') }}">KPIs</a>
+                    <a class="nav-link {{ currentRoute == 'admin_dashboard_sites' ? 'active' : '' }}" href="{{ path('admin_dashboard_sites') }}">Sites</a>
+                    <a class="nav-link {{ currentRoute starts with 'admin_workflow_' ? 'active' : '' }}" href="{{ path('admin_workflow_index') }}">Workflow</a>
+
+                {% elseif is_granted('ROLE_SUPERUSER') %}
+                    <a class="nav-link {{ currentRoute == 'superuser_dashboard_home' ? 'active' : '' }}" href="{{ path('superuser_dashboard_home') }}">Home</a>
+                    <a class="nav-link {{ currentRoute == 'superuser_dashboard_import' ? 'active' : '' }}" href="{{ path('superuser_dashboard_import') }}">Import</a>
+                    <a class="nav-link {{ currentRoute == 'superuser_dashboard_export' ? 'active' : '' }}" href="{{ path('superuser_dashboard_export') }}">Export</a>
+                    <a class="nav-link {{ currentRoute == 'superuser_dashboard_kpis' ? 'active' : '' }}" href="{{ path('superuser_dashboard_kpis') }}">KPIs</a>
+                    <a class="nav-link {{ currentRoute == 'superuser_dashboard_sites' ? 'active' : '' }}" href="{{ path('superuser_dashboard_sites') }}">Sites</a>
+                    <a class="nav-link {{ currentRoute == 'superuser_dashboard_alerts' ? 'active' : '' }}" href="{{ path('superuser_dashboard_alerts') }}">Alerts</a>
+                    <a class="nav-link {{ currentRoute starts with 'superuser_workflow_' ? 'active' : '' }}" href="{{ path('superuser_workflow_index') }}">Workflow</a>
+
+                {% elseif is_granted('ROLE_USER') %}
+                    <a class="nav-link {{ currentRoute == 'user_dashboard_home' ? 'active' : '' }}" href="{{ path('user_dashboard_home') }}">Home</a>
+                    <a class="nav-link {{ currentRoute == 'dashboard_import' ? 'active' : '' }}" href="{{ path('dashboard_import') }}">Import</a>
+                    <a class="nav-link {{ currentRoute == 'dashboard_export' ? 'active' : '' }}" href="{{ path('dashboard_export') }}">Export</a>
+                    <a class="nav-link {{ currentRoute == 'dashboard_kpis' ? 'active' : '' }}" href="{{ path('dashboard_kpis') }}">KPIs</a>
+                    <a class="nav-link {{ currentRoute == 'user_dashboard_sites' ? 'active' : '' }}" href="{{ path('user_dashboard_sites') }}">Sites</a>
+                    <a class="nav-link {{ currentRoute == 'user_dashboard_alerts' ? 'active' : '' }}" href="{{ path('user_dashboard_alerts') }}">Alerts</a>
+                    <a class="nav-link {{ currentRoute starts with 'dashboard_workflow' ? 'active' : '' }}" href="{{ path('dashboard_workflow') }}">Workflow</a>
+                {% endif %}
+
+                {% if is_granted('ROLE_USER') %}
+                    {% set unread = unread_notifications_count() %}
+                    <a class="nav-link {{ currentRoute starts with 'dashboard_notifications' ? 'active' : '' }}" href="{{ path('dashboard_notifications') }}">
+                        Notifications
+                        {% if unread > 0 %}
+                            <span class="badge red" style="margin-left:6px;">{{ unread }}</span>
+                        {% endif %}
+                    </a>
+                {% endif %}
+
+                <a class="nav-link logout-link" href="{{ path('app_logout') }}">Logout</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="content-wrap">
+        {% block dashboard_content %}{% endblock %}
+    </main>
+</div>
+</body>
+</html>

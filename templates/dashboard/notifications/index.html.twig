@@ -1,0 +1,59 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="page-header">
+    <div>
+        <h2 class="page-title">Notifications</h2>
+        <div class="page-desc">Vos alertes et rappels.</div>
+    </div>
+</div>
+
+<div class="card">
+    <h3 class="panel-title">Dernières notifications</h3>
+
+    {% if notifications is empty %}
+        <div class="empty-state">Aucune notification.</div>
+    {% else %}
+        <div class="table-like">
+            <div class="table-row table-head">
+                <div>Date</div>
+                <div>Type</div>
+                <div>Message</div>
+                <div>Statut</div>
+                <div>Action</div>
+            </div>
+            {% for n in notifications %}
+                <div class="table-row">
+                    <div>{{ n.createdAt|date('d/m/Y H:i') }}</div>
+                    <div>{{ n.type }}</div>
+                    <div>
+                        {{ n.message }}
+                        {% if n.ticket %}
+                            <div class="muted" style="margin-top:4px;">
+                                <a href="{{ path('dashboard_workflow_show', {id: n.ticket.id}) }}">Voir ticket #{{ n.ticket.id }}</a>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div>
+                        {% if n.isRead %}
+                            <span class="badge green">Lu</span>
+                        {% else %}
+                            <span class="badge red">Non lu</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        {% if not n.isRead %}
+                            <form method="post" action="{{ path('dashboard_notification_read', {id: n.id}) }}">
+                                <button class="btn btn-sm">Marquer comme lu</button>
+                            </form>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+

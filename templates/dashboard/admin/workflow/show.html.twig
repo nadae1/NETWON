@@ -1,0 +1,99 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<style>
+.ticket-layout { display:grid; grid-template-columns:2fr 1fr; gap:25px; }
+.card { background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; margin-bottom:20px; }
+.badge { padding:6px 12px; border-radius:20px; background:#e2e8f0; font-weight:700; font-size:12px; }
+.actions-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.btn { padding:10px; border:none; border-radius:8px; font-weight:700; cursor:pointer; }
+.btn-green { background:#22c55e; color:white; }
+.btn-red { background:#ef4444; color:white; }
+.btn-blue { background:#3b82f6; color:white; }
+textarea { width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; margin-bottom:12px; }
+.history-item { border-left:4px solid #3b82f6; padding-left:12px; margin-bottom:16px; }
+</style>
+
+<h2>Ticket {{ ticket.reference }}</h2>
+
+<div class="ticket-layout">
+    <div>
+        <div class="card">
+            <h3>Informations ticket</h3>
+            <p><strong>Site:</strong> {{ ticket.siteName }}</p>
+            <p><strong>Service:</strong> {{ ticket.service }}</p>
+            <p><strong>Étape actuelle:</strong> <span class="badge">{{ ticket.currentStep }}</span></p>
+            <p><strong>Assigné à:</strong> {{ ticket.assignedService }}</p>
+            <p><strong>Statut:</strong> {{ ticket.status }}</p>
+            <p><strong>Priorité:</strong> {{ ticket.priority }}</p>
+            <p><strong>Trafic avant:</strong> {{ ticket.trafficBefore ?: '-' }} Mbps</p>
+            <p><strong>Description:</strong><br>{{ ticket.description ?: '-' }}</p>
+        </div>
+
+        <div class="card">
+            <h3>Historique</h3>
+            {% for h in history %}
+                <div class="history-item">
+                    <strong>{{ h.action }}</strong><br>
+                    <small>{{ h.createdAt|date('d/m/Y H:i') }}</small><br>
+                    <span>{{ h.fromStep ?: '-' }} → {{ h.toStep ?: '-' }}</span>
+                    {% if h.comment %}
+                        <p>{{ h.comment }}</p>
+                    {% endif %}
+                </div>
+            {% else %}
+                <p>Aucun historique.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <h3>Actions workflow</h3>
+
+            {% if ticket.isClosed %}
+                <p>Ticket clôturé.</p>
+            {% else %}
+                <form method="post" action="{{ path('workflow_ticket_action', {id: ticket.id}) }}">
+                    <textarea name="comment" rows="4" placeholder="Commentaire..."></textarea>
+
+                    <div class="actions-grid">
+                        {% if ticket.currentStep == 'IP_ANALYSIS' %}
+                            <button name="decision" value="IP_OK" class="btn btn-green">IP OK</button>
+                            <button name="decision" value="IP_NOK_FO_PAIR" class="btn btn-red">Besoin 2ème paire FO</button>
+                            <button name="decision" value="IP_NOK_SWAP" class="btn btn-red">Besoin swap routeur</button>
+                        {% endif %}
+
+                        {% if ticket.currentStep == 'CREATION_WO_IP' %}
+                            <button name="decision" value="WO_CREATED" class="btn btn-blue">WO créé</button>
+                        {% endif %}
+
+                        {% if ticket.currentStep == 'DEPLOYMENT_PLANNING' %}
+                            <button name="decision" value="DEPLOYMENT_READY" class="btn btn-blue">Déploiement planifié</button>
+                        {% endif %}
+
+                        {% if ticket.currentStep == 'EXECUTION_SITE' %}
+                            <button name="decision" value="SITE_DONE" class="btn btn-blue">Action réalisée</button>
+                        {% endif %}
+
+                        {% if ticket.currentStep == 'VALIDATION_FINALE' %}
+                            <button name="decision" value="FINAL_OK" class="btn btn-green">Validation OK</button>
+                            <button name="decision" value="FINAL_NOK" class="btn btn-red">Validation NOK</button>
+                        {% endif %}
+
+                        {% if ticket.currentStep == 'INGENIERIE_CAPILLAIRE' %}
+                            <button name="decision" value="FO_OK" class="btn btn-green">FO OK</button>
+                            <button name="decision" value="FO_NOK" class="btn btn-red">FO NOK</button>
+                        {% endif %}
+
+                        {% if ticket.currentStep == 'KPI_VERIFICATION' %}
+                            <button name="decision" value="KPI_OK" class="btn btn-green">KPI OK - Clôturer</button>
+                            <button name="decision" value="KPI_NOK" class="btn btn-red">KPI NOK - Réouvrir</button>
+                        {% endif %}
+                    </div>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

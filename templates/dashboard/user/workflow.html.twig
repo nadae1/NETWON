@@ -1,0 +1,26 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="page-header">
+    <div>
+        <h2 class="page-title">Workflow</h2>
+        <div class="page-desc">Gestion des demandes, validations et suivi des actions.</div>
+    </div>
+</div>
+
+<div class="card">
+    <h3 class="panel-title">Demandes en cours</h3>
+    <div class="table-like">
+        <div class="table-row">
+            <div>Upgrade lien FO</div>
+            <div><span class="badge mauve">En attente</span></div>
+            <div>2 sites</div>
+        </div>
+        <div class="table-row">
+            <div>Analyse congestion FH</div>
+            <div><span class="badge blue">En cours</span></div>
+            <div>5 sites</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

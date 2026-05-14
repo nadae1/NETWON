@@ -1,0 +1,67 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block body %}
+<div class="bg-white rounded-lg shadow p-6">
+    <h1 class="text-2xl font-bold mb-4">Ticket #{{ ticket.id }} - {{ ticket.title }}</h1>
+    <p><strong>Site(s):</strong>
+        {% for ts in ticket.ticketSites %}
+            {{ ts.siteName }} ({{ ts.typeTrans }}){% if not loop.last %}, {% endif %}
+        {% endfor %}
+    </p>
+    <p><strong>Statut:</strong> {{ ticket.status }}</p>
+    <p><strong>Deadline:</strong> {{ ticket.deadlineAt ? ticket.deadlineAt|date('d/m/Y H:i') : 'Non définie' }}</p>
+
+    <h2 class="text-xl font-semibold mt-6 mb-3">Tâches à réaliser</h2>
+
+    {% for task in tasks %}
+        <form method="post" enctype="multipart/form-data" action="{{ path('user_ip_task_update', {id: ticket.id, taskId: task.id}) }}" class="border rounded p-4 mb-3">
+            <div class="flex items-start gap-3">
+                <input type="checkbox" name="completed" value="1" {% if task.status == 'completed' %}checked disabled{% endif %} class="mt-1">
+                <div class="flex-1">
+                    <strong>{{ task.title }}</strong>
+                    <p class="text-gray-600">{{ task.description }}</p>
+                    {% if task.requiresCapture %}
+                        <div class="mt-2">
+                            <label>Capture écran :</label>
+                            <input type="file" name="capture" accept="image/*" class="block mt-1">
+                            {% if task.capturePath %}
+                                <a href="{{ asset(task.capturePath) }}" target="_blank" class="text-blue-600 text-sm">Voir capture actuelle</a>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                    <textarea name="comment" class="w-full border rounded mt-2" placeholder="Commentaire">{{ task.comment }}</textarea>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-1 rounded mt-2">Mettre à jour</button>
+                </div>
+            </div>
+        </form>
+    {% endfor %}
+
+    <hr class="my-6">
+
+    <h3 class="text-lg font-semibold">Demander une intervention externe</h3>
+    <form method="post" action="{{ path('user_ip_subworkflow', {id: ticket.id}) }}" class="mt-2">
+        <select name="target_service" class="border rounded p-2">
+            <option value="INGENIERIE_CAPILLAIRE">Ingénierie Capillaire</option>
+            <option value="DEPLOIEMENT">Déploiement</option>
+            <option value="RADIO">Support Radio</option>
+            <option value="BACKHAUL">Backhaul</option>
+        </select>
+        <textarea name="reason" class="w-full border rounded mt-2" placeholder="Motif de la demande"></textarea>
+        <button type="submit" class="bg-yellow-600 text-white px-4 py-2 rounded mt-2">Créer sous-workflow</button>
+    </form>
+
+    {% if ticket.status == 'completed' %}
+        <hr class="my-6">
+        <h3 class="text-lg font-semibold">Proposer mise à jour du site</h3>
+        <form method="post" action="{{ path('user_ip_propose_update', {id: ticket.id}) }}">
+            <input type="text" name="new_capacity" placeholder="Nouvelle capacité (Mbps)" class="border rounded p-2 w-full mb-2">
+            <input type="text" name="new_support_type" placeholder="Type de support (ex: FO, FH)" class="border rounded p-2 w-full mb-2">
+            <select name="new_status" class="border rounded p-2 w-full mb-2">
+                <option value="secured">Sécurisé</option>
+                <option value="warning">À surveiller</option>
+            </select>
+            <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded">Envoyer la demande</button>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+
+{% block title %}Dashboard{% endblock %}
+
+{% block body %}
+<div style="padding: 30px;">
+    <h1 style="color:#ff7900;">Dashboard NetWON</h1>
+
+    {% if user %}
+        <p><strong>User:</strong> {{ user.username }}</p>
+        <p><strong>Service:</strong> {{ user.service ?? 'N/A' }}</p>
+    {% endif %}
+
+    <h2>Sites</h2>
+
+    {% if sites is empty %}
+        <p>Aucun site trouvé pour ce service.</p>
+    {% else %}
+        <ul>
+            {% for site in sites %}
+                <li>{{ site.name }} - {{ site.status }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+</div>
+{% endblock %}

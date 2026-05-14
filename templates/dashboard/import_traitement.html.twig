@@ -1,0 +1,41 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="workflow-page">
+    <div class="page-header">
+        <div>
+            <h2 class="page-title">Import des fichiers</h2>
+            <div class="page-desc">Importer traffic, ports et liaison pour traitement Python.</div>
+        </div>
+    </div>
+
+    {% for message in app.flashes('error') %}
+        <div class="flash-error">{{ message }}</div>
+    {% endfor %}
+
+    <div class="card">
+        <form method="post" enctype="multipart/form-data">
+            <div class="form-grid">
+                <div>
+                    <label>Fichier Traffic</label>
+                    <input type="file" name="trafic" required>
+                </div>
+
+                <div>
+                    <label>Fichier Ports</label>
+                    <input type="file" name="port" required>
+                </div>
+
+                <div class="full-width">
+                    <label>Fichier Liaison</label>
+                    <input type="file" name="liaison" required>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button class="btn btn-primary">Traiter</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

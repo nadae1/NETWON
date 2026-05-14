@@ -1,0 +1,64 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Statistiques{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <h1 class="text-3xl font-bold mb-6">Statistiques du Système</h1>
+
+    <!-- Summary Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-gray-600 text-sm font-semibold mb-2">Utilisateurs Total</h3>
+            <p class="text-3xl font-bold text-blue-600">{{ totalUsers }}</p>
+        </div>
+    </div>
+
+    <!-- Statistics by Service -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold mb-4">Tickets par Service</h2>
+            {% if statsByService is empty %}
+                <p class="text-gray-500">Aucun ticket trouvé.</p>
+            {% else %}
+                <div class="space-y-2">
+                    {% for service, count in statsByService %}
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-700">{{ service }}</span>
+                            <div class="flex items-center gap-2">
+                                <div class="w-40 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-blue-600 h-2 rounded-full" 
+                                         style="width: {% set total = statsByService|length %}{{ (count / (statsByService|reduce((carry, item) => carry + item, 0)) * 100)|round }}%"></div>
+                                </div>
+                                <span class="text-sm font-semibold w-10 text-right">{{ count }}</span>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold mb-4">Tickets par Statut</h2>
+            {% if statsByStatus is empty %}
+                <p class="text-gray-500">Aucun ticket trouvé.</p>
+            {% else %}
+                <div class="space-y-2">
+                    {% for status, count in statsByStatus %}
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-700 capitalize">{{ status|replace({'_': ' '})|capitalize }}</span>
+                            <div class="flex items-center gap-2">
+                                <div class="w-40 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-green-600 h-2 rounded-full" 
+                                         style="width: {% set total = statsByStatus|reduce((carry, item) => carry + item, 0) %}{{ (count / total * 100)|round }}%"></div>
+                                </div>
+                                <span class="text-sm font-semibold w-10 text-right">{{ count }}</span>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

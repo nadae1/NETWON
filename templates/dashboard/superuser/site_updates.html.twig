@@ -1,0 +1,31 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<h2 class="text-2xl font-bold mb-4">Demandes de mise à jour de sites</h2>
+<table class="min-w-full bg-white border">
+    <thead>
+        <tr><th>Ticket</th><th>Site</th><th>Nouvelle capacité</th><th>Nouveau support</th><th>Demandé par</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+    {% for req in pendingRequests %}
+        <tr>
+            <td><a href="{{ path('superuser_workflow_show', {id: req.ticket.id}) }}">#{{ req.ticket.id }}</a></td>
+            <td>{{ req.siteName }}</td>
+            <td>{{ req.newCapacity }} Mbps</td>
+            <td>{{ req.newSupportType }}</td>
+            <td>{{ req.requestedBy.username }}</td>
+            <td>
+                <form method="post" action="{{ path('superuser_site_update_validate', {id: req.id}) }}" style="display:inline">
+                    <input type="hidden" name="action" value="validate">
+                    <button class="bg-green-500 text-white px-2 py-1 rounded">Valider</button>
+                </form>
+                <form method="post" action="{{ path('superuser_site_update_validate', {id: req.id}) }}" style="display:inline">
+                    <input type="hidden" name="action" value="reject">
+                    <button class="bg-red-500 text-white px-2 py-1 rounded">Rejeter</button>
+                </form>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

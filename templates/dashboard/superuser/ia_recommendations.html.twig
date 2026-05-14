@@ -1,0 +1,132 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<style>
+.recommendations-page { padding-bottom: 40px; }
+.recommendation-card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 16px;
+    border-left: 4px solid;
+    transition: all 0.2s;
+}
+.recommendation-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.recommendation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.site-name { font-size: 18px; font-weight: 700; color: #0f172a; }
+.badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.badge-critical { background: #fee2e2; color: #dc2626; }
+.badge-high { background: #fff1f2; color: #ef4444; }
+.badge-medium { background: #fffbeb; color: #f59e0b; }
+.badge-low { background: #ecfdf5; color: #10b981; }
+.action-checkbox { margin-right: 12px; transform: scale(1.2); }
+.action-select { padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd5e1; }
+.btn-primary { background: #3b82f6; color: white; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+.btn-secondary { background: #f1f5f9; color: #475569; padding: 12px 24px; border-radius: 8px; text-decoration: none; }
+.global-stats { display: flex; gap: 20px; margin-bottom: 24px; flex-wrap: wrap; }
+.stat-chip { background: #f1f5f9; padding: 8px 16px; border-radius: 30px; font-size: 14px; }
+</style>
+
+<div class="recommendations-page">
+    <div class="page-header">
+        <div>
+            <h2 class="page-title">🤖 Recommandations IA</h2>
+            <div class="page-desc">Actions suggérées par l'intelligence artificielle pour les sites critiques</div>
+        </div>
+        <div>
+            <a href="{{ path('superuser_plan_data') }}" class="btn-secondary">← Retour</a>
+        </div>
+    </div>
+
+    <!-- Statistiques globales -->
+    <div class="global-stats">
+        <div class="stat-chip">📊 Total sites analysés: {{ recommendations|length }}</div>
+        <div class="stat-chip">🔴 Critiques: {{ globalStats.critical ?? 0 }}</div>
+        <div class="stat-chip">🟠 Haut risque: {{ globalStats.high ?? 0 }}</div>
+        <div class="stat-chip">🟡 Moyen: {{ globalStats.medium ?? 0 }}</div>
+        <div class="stat-chip">🟢 Faible: {{ globalStats.low ?? 0 }}</div>
+    </div>
+
+    <form method="post" action="{{ path('superuser_ia_recommendations') }}">
+        {% for rec in recommendations %}
+            <div class="recommendation-card" style="border-left-color: {{ rec.borderColor }}">
+                <div class="recommendation-header">
+                    <div>
+                        <input type="checkbox" name="actions[{{ rec.siteId }}][selected]" class="action-checkbox" id="site_{{ rec.siteId }}">
+                        <label for="site_{{ rec.siteId }}" class="site-name">{{ rec.siteName }}</label>
+                        {% if rec.pairedSiteName %}
+                            <span class="muted">(pairé: {{ rec.pairedSiteName }})</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="badge badge-{{ rec.severity }}">{{ rec.status|replace({'_': ' '}) }}</span>
+                        <span class="badge" style="background:#e2e8f0">{{ rec.service }}</span>
+                        <span class="badge" style="background:#e2e8f0">{{ rec.classification }}</span>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 12px;">
+                    <span>📈 Trafic: <strong>{{ rec.maxTrafic }} Mbps</strong> / {{ rec.seuilCritique }} Mbps</span>
+                    <span style="margin-left: 20px">📊 Congestion: <strong>{{ rec.congestionLevel }}%</strong></span>
+                    <span style="margin-left: 20px">⚠️ Occurrences: <strong>{{ rec.nombreOccurrences }}</strong></span>
+                </div>
+
+                <div style="margin-bottom: 12px; color: #475569;">
+                    {{ rec.description }}
+                </div>
+
+                <div>
+                    <strong>Actions recommandées:</strong>
+                    <select name="actions[{{ rec.siteId }}][action_type]" class="action-select" style="margin-left: 10px;">
+                        {% for action in rec.recommendedActions %}
+                            <option value="{{ action.type }}" {% if loop.first %}selected{% endif %}>
+                                {{ action.label }} ({{ action.priority|upper }}) - {{ action.estimatedEffort }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <select name="actions[{{ rec.siteId }}][priority]" class="action-select" style="margin-left: 10px;">
+                        <option value="urgent">🚨 Urgent</option>
+                        <option value="high" selected>🔴 Haute</option>
+                        <option value="medium">🟠 Moyenne</option>
+                        <option value="low">🟢 Basse</option>
+                    </select>
+                </div>
+
+                <div style="margin-top: 8px; font-size: 12px; color: #64748b;">
+Équipes impliquées: {{ rec.recommendedActions|first.teams|default([])|join(', ') }}                </div>
+            </div>
+        {% else %}
+            <div class="card">
+                <div class="empty-state">Aucune recommandation IA pour le moment.</div>
+            </div>
+        {% endfor %}
+
+        {% if recommendations is not empty %}
+            <div style="margin-top: 30px; text-align: center;">
+                <button type="submit" class="btn-primary">✅ Valider et créer le workflow</button>
+            </div>
+        {% endif %}
+    </form>
+</div>
+
+<script>
+// Sélectionner/désélectionner tous les sites
+document.querySelectorAll('.action-checkbox').forEach(cb => {
+    cb.addEventListener('change', function() {
+        // Optionnel: logique de sélection globale
+    });
+});
+</script>
+{% endblock %}

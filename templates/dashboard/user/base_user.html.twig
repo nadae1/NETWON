@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Workflow - {{ app.user.username }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="flex">
+        <aside class="w-64 bg-white h-screen shadow">
+            <div class="p-4 font-bold">Menu User</div>
+            <nav>
+                <a href="{{ path('user_ip_dashboard') }}" class="block p-4 hover:bg-gray-200">🏠 Accueil IP</a>
+                <a href="{{ path('user_ip_tickets') }}" class="block p-4 hover:bg-gray-200">📋 Tickets FO</a>
+                <a href="{{ path('dashboard_notifications') }}" class="block p-4 hover:bg-gray-200">🔔 Notifications</a>
+                <a href="{{ path('app_logout') }}" class="block p-4 hover:bg-gray-200 text-red-600">🚪 Déconnexion</a>
+            </nav>
+        </aside>
+        <main class="flex-1 p-6">
+            {% for message in app.flashes('success') %}
+                <div class="bg-green-100 text-green-800 p-2 rounded mb-4">{{ message }}</div>
+            {% endfor %}
+            {% for message in app.flashes('error') %}
+                <div class="bg-red-100 text-red-800 p-2 rounded mb-4">{{ message }}</div>
+            {% endfor %}
+            {% block body %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>

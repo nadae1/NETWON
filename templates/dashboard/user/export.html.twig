@@ -1,0 +1,87 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="workflow-page">
+    <div class="page-header">
+        <div>
+            <h2 class="page-title">Export des données</h2>
+            <div class="page-desc">Exporter les sites vers un fichier CSV - Service: {{ serviceName }}</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <form method="post" action="{{ path('user_data_export_sites') }}" class="export-form">
+            <div class="form-group">
+                <label>Mode d'export</label>
+                <select name="export_mode" class="form-control">
+                    <option value="all">Tous les sites</option>
+                    <option value="critical">Sites critiques uniquement</option>
+                    <option value="selected">Sites sélectionnés</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Recherche de site</label>
+                <input type="text" name="site_search" class="form-control" placeholder="Nom du site...">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Date de début</label>
+                    <input type="date" name="date_from" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Date de fin</label>
+                    <input type="date" name="date_to" class="form-control">
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">📥 Exporter en CSV</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.export-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.form-group label {
+    font-weight: 600;
+    color: #475569;
+    font-size: 14px;
+}
+.form-control {
+    padding: 10px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 14px;
+    max-width: 300px;
+}
+.form-row {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+.form-actions {
+    margin-top: 10px;
+}
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+}
+</style>
+{% endblock %}

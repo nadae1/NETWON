@@ -1,0 +1,75 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="workflow-page">
+    <div class="page-header">
+        <div>
+            <h2 class="page-title">KPIs</h2>
+            <div class="page-desc">Indicateurs clés de performance - Service: {{ serviceName }}</div>
+        </div>
+    </div>
+
+    <div class="cards-grid">
+        <div class="card stat-card stat-blue">
+            <div>
+                <div class="stat-label">Total Sites</div>
+                <div class="stat-value">{{ totalSites }}</div>
+                <div class="stat-small">pour {{ serviceName }}</div>
+            </div>
+        </div>
+        <div class="card stat-card stat-red">
+            <div>
+                <div class="stat-label">Sites Critiques</div>
+                <div class="stat-value">{{ criticalSites }}</div>
+                <div class="stat-small">{{ criticalPercentage }}% du total</div>
+            </div>
+        </div>
+        <div class="card stat-card stat-green">
+            <div>
+                <div class="stat-label">Trafic Moyen</div>
+                <div class="stat-value">{{ avgTraffic }}</div>
+                <div class="stat-small">Mbps</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="panel-title">Classification des sites</h3>
+        <table class="workflow-table">
+            <thead>
+                <tr><th>Classification</th><th>Total</th><th>Critiques</th></tr>
+            </thead>
+            <tbody>
+                {% for className, row in classificationStats %}
+                    <tr>
+                        <td>{{ className }}</td>
+                        <td>{{ row.total }}</td>
+                        <td>{{ row.critical }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="3" class="empty-state">Aucune donnée</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-bottom: 30px;
+}
+.stat-card {
+    padding: 20px;
+    border-radius: 12px;
+}
+.stat-blue { background: #eff6ff; border: 1px solid #bfdbfe; }
+.stat-red { background: #fff1f2; border: 1px solid #fecaca; }
+.stat-green { background: #ecfeff; border: 1px solid #99f6e4; }
+.stat-label { font-size: 13px; color: #64748b; font-weight: 600; text-transform: uppercase; }
+.stat-value { font-size: 32px; font-weight: 800; color: #020617; }
+.stat-small { color: #536782; font-size: 13px; margin-top: 6px; }
+</style>
+{% endblock %}

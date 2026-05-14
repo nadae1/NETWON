@@ -1,0 +1,32 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block body %}
+<div class="container mx-auto p-6">
+    <div class="bg-white rounded-lg shadow p-6">
+        <h1>Demande 2ème paire FO</h1>
+        <p>Ticket parent : {{ task.ticket.subworkflows.first.parentTicket.title }}</p>
+        <p>Sites concernés : ...</p>
+
+        <h2 class="text-xl font-semibold mt-4">Étapes</h2>
+        <form method="post" action="{{ path('user_task_complete', {id: task.id}) }}">
+            <div class="mb-3">
+                <label><input type="checkbox" name="step1"> 1. Étude faisabilité (topologie, distance)</label>
+            </div>
+            <div class="mb-3">
+                <label><input type="checkbox" name="step2"> 2. Conception plan de raccordement</label>
+            </div>
+            <div class="mb-3">
+                <label><input type="checkbox" name="step3"> 3. Demande envoyée aux équipes FO terrain</label>
+            </div>
+            <div class="mb-3">
+                <label><input type="checkbox" name="step4"> 4. Raccordement réalisé et testé</label>
+            </div>
+            <textarea name="comment" placeholder="Commentaire" class="w-full border p-2"></textarea>
+            <div class="mt-4">
+                <button type="submit" name="cap_decision" value="OK" class="bg-green-600 text-white px-4 py-2 rounded">Valider – 2ème paire OK</button>
+                <button type="submit" name="cap_decision" value="NOK" class="bg-red-600 text-white px-4 py-2 rounded">NOK – Demande rejetée</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

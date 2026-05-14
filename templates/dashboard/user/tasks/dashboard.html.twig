@@ -1,0 +1,52 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="container mx-auto p-6">
+    <h1 class="text-2xl font-bold mb-4">Mes tâches à réaliser</h1>
+    <p class="mb-4 text-gray-600">Service : {{ user.service }}</p>
+
+    {% if tasks is empty %}
+        <div class="bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded">
+            ✅ Aucune tâche en attente pour le moment.
+        </div>
+    {% else %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full border-collapse">
+                <thead>
+                    <tr class="bg-gray-100 border-b border-gray-300">
+                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Tâche</th>
+                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Ticket</th>
+                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Sites ({{ user.service }})</th>
+                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
+                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Date création</th>
+                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for task in tasks %}
+                        {% set filteredSites = task.ticket.ticketSites|filter(ts => ts.typeTrans|upper == user.service|upper) %}
+                        {% if filteredSites is not empty %}
+                            <tr class="border-b border-gray-200 hover:bg-gray-50 {{ cycle(['bg-white', 'bg-gray-50'], loop.index0) }}">
+                                <td class="px-4 py-3 text-sm text-gray-800">{{ task.title }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-600">{{ task.ticket.title }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-600">
+                                    {% for ts in filteredSites %}
+                                        <span class="inline-block bg-gray-100 rounded px-2 py-0.5 text-xs mr-1 mb-1">
+                                            {{ ts.siteName }} ({{ ts.typeTrans }})
+                                        </span>
+                                    {% endfor %}
+                                </td>
+                                <td class="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{{ task.description|default('-') }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{{ task.createdAt ? task.createdAt|date('d/m/Y H:i') : '-' }}</td>
+                                <td class="px-4 py-3 text-sm">
+                                    <a href="{{ path('user_task_show', {id: task.id}) }}" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition">Démarrer</a>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

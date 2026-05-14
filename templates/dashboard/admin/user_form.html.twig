@@ -1,0 +1,72 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4 max-w-2xl">
+    <div class="mb-6">
+        <a href="{{ path('admin_users') }}" class="text-blue-600 hover:underline">← Retour à la liste</a>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h1 class="text-2xl font-bold mb-6">{{ title }}</h1>
+
+        {{ form_start(form) }}
+        {{ form_errors(form) }}
+
+        <div class="space-y-4">
+            <div>
+                {{ form_label(form.username, "Nom d'utilisateur") }}
+                {{ form_widget(form.username, {attr: {class: 'w-full border border-gray-300 rounded px-3 py-2'}}) }}
+                {{ form_errors(form.username) }}
+            </div>
+
+            <div>
+                {{ form_label(form.email, "Email") }}
+                {{ form_widget(form.email, {attr: {class: 'w-full border border-gray-300 rounded px-3 py-2'}}) }}
+                {{ form_errors(form.email) }}
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    {{ form_label(form.service, "Service") }}
+                    {{ form_widget(form.service, {attr: {class: 'w-full border border-gray-300 rounded px-3 py-2'}}) }}
+                    {{ form_errors(form.service) }}
+                </div>
+
+                <div>
+                    {{ form_label(form.department, "Département") }}
+                    {{ form_widget(form.department, {attr: {class: 'w-full border border-gray-300 rounded px-3 py-2'}}) }}
+                    {{ form_errors(form.department) }}
+                </div>
+            </div>
+
+            <div>
+                {{ form_label(form.plainPassword, "Mot de passe") }}
+                {{ form_widget(form.plainPassword, {attr: {class: 'w-full border border-gray-300 rounded px-3 py-2'}}) }}
+                <p class="text-xs text-gray-600 mt-1">Laissez vide pour garder le mot de passe actuel (en édition)</p>
+                {{ form_errors(form.plainPassword) }}
+            </div>
+
+            <div>
+                {{ form_label(form.roles, "Rôles") }}
+                <div class="space-y-2">
+                    {{ form_widget(form.roles, {attr: {class: 'w-full'}}) }}
+                </div>
+                {{ form_errors(form.roles) }}
+            </div>
+        </div>
+
+        <div class="mt-6 flex gap-3">
+            <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
+                Enregistrer
+            </button>
+            <a href="{{ path('admin_users') }}" class="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500">
+                Annuler
+            </a>
+        </div>
+
+        {{ form_end(form) }}
+    </div>
+</div>
+{% endblock %}

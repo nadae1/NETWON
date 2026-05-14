@@ -1,0 +1,126 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="workflow-page">
+    <div class="page-header">
+        <div>
+            <h2 class="page-title">Workflow</h2>
+            <div class="page-desc">Gestion des tickets, traitement des tâches et suivi de progression.</div>
+        </div>
+        <div class="workflow-actions">
+            <a href="{{ path('dashboard_workflow_new') }}" class="btn btn-primary">Créer un ticket</a>
+        </div>
+    </div>
+
+    {% for message in app.flashes('success') %}
+        <div class="flash-success">{{ message }}</div>
+    {% endfor %}
+
+    {% for message in app.flashes('error') %}
+        <div class="flash-error">{{ message }}</div>
+    {% endfor %}
+
+    {% if myOverdueTasks is not empty %}
+        <div class="card">
+            <h3 class="panel-title">Alertes retard</h3>
+            <div class="table-like">
+                {% for task in myOverdueTasks %}
+                    <div class="table-row">
+                        <div>
+                            <strong>
+                                <a href="{{ path('dashboard_workflow_show', {id: task.ticket.id}) }}">{{ task.ticket.title }}</a>
+                            </strong>
+                        </div>
+                        <div><span class="badge red">En retard</span></div>
+                        <div>{{ task.ticket.deadlineAt ? task.ticket.deadlineAt|date('d/m/Y H:i') : '-' }}</div>
+                        <div>{{ task.assignedTo.username }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <h3 class="panel-title">Sites critiques à traiter</h3>
+        {% if criticalSites is empty %}
+            <div class="empty-state">Aucun site critique disponible.</div>
+        {% else %}
+            <div class="table-like">
+                {% for site in criticalSites %}
+                    <div class="table-row">
+                        <div><strong>{{ site.name }}</strong></div>
+                        <div>{{ site.service }}</div>
+                        <div>{{ site.status }}</div>
+                        <div>
+                            <a href="{{ path('dashboard_workflow_new') }}" class="btn btn-primary btn-sm">Créer ticket</a>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h3 class="panel-title">Mes tâches en attente</h3>
+        {% if myPendingTasks is empty %}
+            <div class="empty-state">Aucune tâche en attente.</div>
+        {% else %}
+            <div class="table-like">
+                {% for task in myPendingTasks %}
+                    <div class="table-row">
+                        <div>
+                            <strong>
+                                <a href="{{ path('dashboard_workflow_show', {id: task.ticket.id}) }}">{{ task.ticket.title }}</a>
+                            </strong>
+                            <div class="muted">{{ task.title }}</div>
+                        </div>
+                        <div>
+                            {% if task.status == 'pending' %}
+                                <span class="badge mauve">En attente</span>
+                            {% elseif task.status == 'in_progress' %}
+                                <span class="badge blue">En cours</span>
+                            {% else %}
+                                <span class="badge red">{{ task.status }}</span>
+                            {% endif %}
+                        </div>
+                        <div>{{ task.ticket.progress }}%</div>
+                        <div>{{ task.ticket.deadlineAt ? task.ticket.deadlineAt|date('d/m/Y H:i') : '-' }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h3 class="panel-title">Tickets créés par moi</h3>
+        {% if myCreatedTickets is empty %}
+            <div class="empty-state">Aucun ticket créé.</div>
+        {% else %}
+            <div class="table-like">
+                {% for ticket in myCreatedTickets %}
+                    <div class="table-row">
+                        <div>
+                            <strong>
+                                <a href="{{ path('dashboard_workflow_show', {id: ticket.id}) }}">{{ ticket.title }}</a>
+                            </strong>
+                        </div>
+                        <div>
+                            {% if ticket.status == 'open' %}
+                                <span class="badge mauve">Ouvert</span>
+                            {% elseif ticket.status == 'in_progress' %}
+                                <span class="badge blue">En cours</span>
+                            {% elseif ticket.status == 'completed' or ticket.status == 'closed' %}
+                                <span class="badge green">{{ ticket.status }}</span>
+                            {% else %}
+                                <span class="badge red">{{ ticket.status }}</span>
+                            {% endif %}
+                        </div>
+                        <div>{{ ticket.progress }}%</div>
+                        <div>{{ ticket.actionType }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

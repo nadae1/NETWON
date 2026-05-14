@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion - NetWON</title>
+    <link rel="stylesheet" href="{{ asset('assets/css/login.css') }}">
+</head>
+<body>
+<div class="login-layout">
+    <div class="login-card">
+
+        {% if error %}
+            <div class="alert-error">
+                {{ error.messageKey|trans(error.messageData, 'security') }}
+            </div>
+        {% endif %}
+
+        <form method="post" action="{{ path('app_login') }}" autocomplete="off">
+            <div class="form-group">
+                <label for="username" class="form-label">Username</label>
+                <input
+                    id="username"
+                    type="text"
+                    name="username"
+                    class="form-control"
+                    value="{{ last_username }}"
+                    maxlength="100"
+                    required
+                    autofocus
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="password" class="form-label">Password</label>
+                <input
+                    id="password"
+                    type="password"
+                    name="password"
+                    class="form-control"
+                    maxlength="255"
+                    required
+                >
+            </div>
+
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+
+            <button type="submit" class="login-btn">Se connecter</button>
+        </form>
+
+        <div class="login-footer">
+            Mot de passe oublié ?
+            <a href="{{ path('app_forgot_password') }}">Réinitialiser</a>
+        </div>
+    </div>
+</div>
+</body>
+</html>

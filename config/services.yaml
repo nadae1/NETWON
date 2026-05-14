@@ -1,0 +1,20 @@
+parameters:
+    ticket_proofs_directory: '%kernel.project_dir%/public/uploads/ticket_proofs'
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/DependencyInjection/'
+            - '../src/Entity/'
+            - '../src/Kernel.php'
+
+    App\Service\PythonApiService:
+        arguments:
+            $baseUrl: '%env(PYTHON_API_BASE_URL)%'
+    
+    App\Service\FastApiPortDetector: ~

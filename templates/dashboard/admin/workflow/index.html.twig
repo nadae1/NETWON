@@ -1,0 +1,199 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<style>
+.workflow-home { padding: 6px 0 30px; }
+.workflow-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    margin-bottom: 30px;
+}
+.workflow-title { font-size: 32px; font-weight: 800; color: #07152f; margin: 0; }
+.workflow-subtitle { color: #60708a; font-size: 18px; margin-top: 6px; }
+
+.workflow-new-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: #0f172a;
+    color: white;
+    padding: 13px 20px;
+    border-radius: 12px;
+    text-decoration: none;
+    font-weight: 800;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .20);
+}
+.workflow-new-btn:hover { background: #1e293b; color: white; }
+
+.workflow-filter {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 30px;
+}
+.workflow-filter-icon { font-size: 22px; color: #64748b; }
+.workflow-filter select {
+    width: 180px;
+    padding: 13px 16px;
+    border-radius: 13px;
+    border: 1px solid #dbe3ef;
+    background: white;
+    color: #0f172a;
+    font-size: 16px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, .04);
+}
+.workflow-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+}
+.workflow-card {
+    background: white;
+    border: 1px solid #d9e2ef;
+    border-radius: 16px;
+    padding: 25px 26px;
+    min-height: 150px;
+    position: relative;
+    box-shadow: 0 5px 14px rgba(15, 23, 42, .03);
+    transition: .2s ease;
+}
+.workflow-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, .08);
+}
+.workflow-card-link { text-decoration: none; color: inherit; display: block; }
+.workflow-card-top { display: flex; gap: 10px; margin-bottom: 18px; align-items: center; }
+.workflow-badge {
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+}
+.badge-open, .badge-in-progress { color: #2563eb; background: #dbeafe; border: 1px solid #93c5fd; }
+.badge-pending { color: #d97706; background: #fff7ed; border: 1px solid #fdba74; }
+.badge-completed, .badge-closed { color: #059669; background: #ccfbf1; border: 1px solid #5eead4; }
+.badge-blocked { color: #ef4444; background: #fee2e2; border: 1px solid #fca5a5; }
+.priority-critical { color: #ef4444; background: #fee2e2; border: 1px solid #fca5a5; }
+.priority-high { color: #f97316; background: #ffedd5; border: 1px solid #fdba74; }
+.priority-medium { color: #d97706; background: #fef3c7; border: 1px solid #fcd34d; }
+.priority-low { color: #64748b; background: #e2e8f0; border: 1px solid #cbd5e1; }
+.workflow-flow-icon {
+    position: absolute;
+    top: 25px;
+    right: 25px;
+    color: #64748b;
+    font-size: 22px;
+}
+.workflow-card-title {
+    font-size: 19px;
+    font-weight: 800;
+    color: #020617;
+    margin-bottom: 8px;
+}
+.workflow-card-desc {
+    color: #536782;
+    font-size: 16px;
+    line-height: 1.35;
+    min-height: 44px;
+    margin-bottom: 18px;
+}
+.workflow-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #526783;
+    font-size: 15px;
+}
+.workflow-empty {
+    background: white;
+    border: 1px dashed #cbd5e1;
+    border-radius: 16px;
+    padding: 40px;
+    color: #64748b;
+    font-size: 17px;
+}
+@media (max-width: 900px) {
+    .workflow-grid { grid-template-columns: 1fr; }
+    .workflow-head { flex-direction: column; }
+}
+</style>
+
+<div class="workflow-home">
+    <div class="workflow-head">
+        <div>
+            <h1 class="workflow-title">Workflows</h1>
+            <div class="workflow-subtitle">
+                {{ tickets|length }} workflows · Visualisation globale
+            </div>
+        </div>
+
+        <a href="{{ path('admin_workflow_export_statistics') }}" class="workflow-new-btn">
+            Export Statistics
+        </a>
+    </div>
+
+    <form method="get" action="{{ path('admin_workflow_index') }}" class="workflow-filter">
+        <div class="workflow-filter-icon">⌯</div>
+
+        <select name="status" onchange="this.form.submit()">
+            <option value="" {{ currentStatus is empty ? 'selected' : '' }}>All Status</option>
+            <option value="open" {{ currentStatus == 'open' ? 'selected' : '' }}>Open</option>
+            <option value="in_progress" {{ currentStatus == 'in_progress' ? 'selected' : '' }}>In Progress</option>
+            <option value="completed" {{ currentStatus == 'completed' ? 'selected' : '' }}>Completed</option>
+            <option value="closed" {{ currentStatus == 'closed' ? 'selected' : '' }}>Closed</option>
+        </select>
+    </form>
+
+    {% if tickets is empty %}
+        <div class="workflow-empty">Aucun workflow trouvé.</div>
+    {% else %}
+        <div class="workflow-grid">
+            {% for ticket in tickets %}
+                {% set status = ticket.status %}
+                {% set totalTasks = ticket.tasks|length %}
+                {% set totalSites = ticket.ticketSites|length %}
+
+                {% set priority = 'low' %}
+                {% if ticket.deadlineAt and ticket.deadlineAt < date() and ticket.status not in ['completed', 'closed'] %}
+                    {% set priority = 'critical' %}
+                    {% set status = 'blocked' %}
+                {% elseif ticket.progress < 30 %}
+                    {% set priority = 'high' %}
+                {% elseif ticket.progress < 80 %}
+                    {% set priority = 'medium' %}
+                {% endif %}
+
+                <a href="{{ path('admin_workflow_show', {id: ticket.id}) }}" class="workflow-card-link">
+                    <div class="workflow-card">
+                        <div class="workflow-flow-icon">⌘</div>
+
+                        <div class="workflow-card-top">
+                            <span class="workflow-badge badge-{{ status|replace({'_':'-'}) }}">
+                                {{ status|replace({'_':' '})|upper }}
+                            </span>
+
+                            <span class="workflow-badge priority-{{ priority }}">
+                                {{ priority|upper }}
+                            </span>
+                        </div>
+
+                        <div class="workflow-card-title">{{ ticket.title }}</div>
+                        <div class="workflow-card-desc">{{ ticket.description ?: 'Aucune description.' }}</div>
+
+                        <div class="workflow-meta">
+                            <span>{{ ticket.actionType }}</span>
+                            <span>{{ ticket.deadlineAt ? ticket.deadlineAt|date('M d') : '-' }}</span>
+                            <span>{{ totalTasks }} assigned</span>
+                            <span>{{ totalSites }} sites</span>
+                        </div>
+                    </div>
+                </a>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

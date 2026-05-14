@@ -1,0 +1,53 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Gestion des Services{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold">Gestion des Services</h1>
+        <a href="{{ path('admin_service_new') }}" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+            + Nouveau Service
+        </a>
+    </div>
+
+    {% if services is empty %}
+        <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
+            Aucun service trouvé.
+        </div>
+    {% else %}
+        <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-gray-100 border-b">
+                    <tr>
+                        <th class="px-6 py-3 font-semibold">Couleur</th>
+                        <th class="px-6 py-3 font-semibold">Nom</th>
+                        <th class="px-6 py-3 font-semibold">Description</th>
+                        <th class="px-6 py-3 font-semibold">Délai (jours)</th>
+                        <th class="px-6 py-3 font-semibold">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for service in services %}
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="px-6 py-3">
+                                <div class="w-6 h-6 rounded" style="background-color: {{ service.color }}"></div>
+                            </td>
+                            <td class="px-6 py-3 font-semibold">{{ service.name }}</td>
+                            <td class="px-6 py-3">{{ service.description[:50] }}...</td>
+                            <td class="px-6 py-3">{{ service.defaultDeadlineDays }} jours</td>
+                            <td class="px-6 py-3">
+                                <div class="flex gap-2">
+                                    <a href="{{ path('admin_service_edit', {id: service.id}) }}" class="text-blue-600 hover:underline text-xs">
+                                        Éditer
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

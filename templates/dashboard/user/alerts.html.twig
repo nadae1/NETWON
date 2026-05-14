@@ -1,0 +1,43 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="workflow-page">
+    <div class="page-header">
+        <div>
+            <h2 class="page-title">Alertes</h2>
+            <div class="page-desc">Sites critiques nécessitant une attention - Service: {{ serviceName }}</div>
+        </div>
+    </div>
+
+    <div class="card">
+        {% if criticalSites is empty %}
+            <div class="empty-state">✅ Aucune alerte critique pour votre service</div>
+        {% else %}
+            <table class="workflow-table">
+                <thead>
+                    <tr>
+                        <th>Site</th>
+                        <th>Classification</th>
+                        <th>Type Trans</th>
+                        <th>Occurrences</th>
+                        <th>Date max</th>
+                        <th>Trafic Max</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for site in criticalSites %}
+                        <tr>
+                            <td>{{ site.siteName }}</td>
+                            <td>{{ site.classification }}</td>
+                            <td>{{ site.typeTrans ?: '-' }}</td>
+                            <td>{{ site.nombreOccurrences }}</td>
+                            <td>{{ site.dateMax|date('d/m/Y H:i') }}</td>
+                            <td>{{ site.maxTrafic|number_format(2, '.', ' ') }} Mbps</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,222 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="page-header">
+    <div>
+        <h2 class="page-title">{{ ticket.title }}</h2>
+        <div class="page-desc">{{ ticket.description ?: 'Aucune description.' }}</div>
+    </div>
+</div>
+
+<div class="card">
+    <h3 class="panel-title">Informations générales</h3>
+    <div class="table-like">
+        <div class="table-row">
+            <div><strong>Action</strong></div>
+            <div>{{ ticket.actionType }}</div>
+        </div>
+
+        <div class="table-row">
+            <div><strong>Statut</strong></div>
+            <div>
+                {% if ticket.status == 'open' %}
+                    <span class="badge mauve">Ouvert</span>
+                {% elseif ticket.status == 'in_progress' %}
+                    <span class="badge blue">En cours</span>
+                {% elseif ticket.status == 'completed' %}
+                    <span class="badge green">Terminé</span>
+                {% elseif ticket.status == 'closed' %}
+                    <span class="badge green">Clôturé</span>
+                {% else %}
+                    <span class="badge red">{{ ticket.status }}</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="table-row">
+            <div><strong>Progression</strong></div>
+            <div>{{ ticket.progress }}%</div>
+        </div>
+
+        <div class="table-row">
+            <div><strong>Bloqué chez</strong></div>
+            <div>
+                {% set blocker = null %}
+                {% for task in ticket.tasks %}
+                    {% if blocker is null and task.status != 'done' %}
+                        {% set blocker = task.assignedTo.username ?? task.assignedTo.email %}
+                    {% endif %}
+                {% endfor %}
+
+                {% if blocker %}
+                    <span class="badge red">{{ blocker }}</span>
+                {% else %}
+                    <span class="badge green">Aucun blocage</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="table-row">
+            <div><strong>Date limite</strong></div>
+            <div>{{ ticket.deadlineAt ? ticket.deadlineAt|date('d/m/Y H:i') : '-' }}</div>
+        </div>
+
+        <div class="table-row">
+            <div><strong>Créé par</strong></div>
+            <div>{{ ticket.createdBy.username ?? ticket.createdBy.email ?? 'Utilisateur' }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3 class="panel-title">Sites concernés</h3>
+
+    {% if ticket.ticketSites is empty %}
+        <div class="empty-state">Aucun site lié.</div>
+    {% else %}
+        <div class="table-like">
+            <div class="table-row table-head">
+                <div>Site</div>
+                <div>Type Trans</div>
+                <div>Service</div>
+            </div>
+
+            {% for ticketSite in ticket.ticketSites %}
+                <div class="table-row">
+                    <div><strong>{{ ticketSite.siteName }}</strong></div>
+                    <div>{{ ticketSite.typeTrans ?: '-' }}</div>
+                    <div>{{ ticketSite.serviceName ?: '-' }}</div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3 class="panel-title">Tâches</h3>
+
+    {% if ticket.tasks is empty %}
+        <div class="empty-state">Aucune tâche.</div>
+    {% else %}
+        <div class="table-like">
+            {% for task in ticket.tasks %}
+                <div class="table-row">
+                    <div>
+                        <strong>{{ task.assignedTo.username ?? task.assignedTo.email }}</strong>
+                        <div>{{ task.title }}</div>
+                        <div class="muted">{{ task.description ?: '-' }}</div>
+                    </div>
+
+                    <div>
+                        {% if task.status == 'pending' %}
+                            <span class="badge mauve">En attente</span>
+                        {% elseif task.status == 'in_progress' %}
+                            <span class="badge blue">En cours</span>
+                        {% elseif task.status == 'done' %}
+                            <span class="badge green">Terminée</span>
+                        {% else %}
+                            <span class="badge red">{{ task.status }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div>{{ task.serviceName ?: '-' }}</div>
+
+                    <div>
+                        {% if app.user and app.user.id == task.assignedTo.id %}
+                            {% if task.status == 'pending' %}
+    <form method="post" action="{{ path('dashboard_task_start', {id: task.id}) }}">
+        <button type="submit" class="btn btn-primary">Démarrer</button>
+    </form>
+{% endif %}
+
+                            {% if task.status != 'done' %}
+                                <a href="{{ path('dashboard_task_complete', {id: task.id}) }}" class="btn btn-success btn-sm">
+                                    Terminer
+                                </a>
+                            {% else %}
+                                <span class="badge green">Terminée</span>
+                            {% endif %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if task.comment or task.proofFile %}
+                    <div class="table-row">
+                        <div><strong>Preuve</strong></div>
+                        <div>
+                            <div>{{ task.comment ?: '-' }}</div>
+                            {% if task.proofFile %}
+                                <a href="{{ asset('uploads/ticket_proofs/' ~ task.proofFile) }}" target="_blank">Voir fichier</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3 class="panel-title">Commentaires</h3>
+
+    {% if ticket.comments is empty %}
+        <div class="empty-state">Aucun commentaire.</div>
+    {% else %}
+        <div class="table-like">
+            {% for comment in ticket.comments %}
+                <div class="table-row">
+                    <div>
+                        <strong>{{ comment.user.username ?? comment.user.email }}</strong>
+                        <div class="muted">{{ comment.createdAt|date('d/m/Y H:i') }}</div>
+                    </div>
+                    <div>{{ comment.message }}</div>
+                    <div>
+                        {% if comment.filePath %}
+                            <a href="{{ asset('uploads/ticket_proofs/' ~ comment.filePath) }}" target="_blank">Pièce jointe</a>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div style="margin-top: 20px;">
+        {{ form_start(commentForm) }}
+            {{ form_row(commentForm.message) }}
+            {{ form_row(commentForm.filePath) }}
+            <button class="btn btn-primary">Ajouter commentaire</button>
+        {{ form_end(commentForm) }}
+    </div>
+</div>
+
+<div class="card">
+    <h3 class="panel-title">Historique</h3>
+
+    {% if ticket.history is empty %}
+        <div class="empty-state">Aucun historique.</div>
+    {% else %}
+        <div class="table-like">
+            {% for item in ticket.history %}
+                <div class="table-row">
+                    <div>{{ item.createdAt|date('d/m/Y H:i') }}</div>
+                    <div>{{ item.action }}</div>
+                    <div>{{ item.details ?: '-' }}</div>
+                    <div>{{ item.user ? (item.user.username ?? item.user.email) : 'Système' }}</div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+{% if ticket.progress == 100 and ticket.status != 'closed' %}
+<div class="card">
+    <form method="post" action="{{ path('dashboard_ticket_close', {id: ticket.id}) }}">
+        <button class="btn btn-primary">Clôturer le ticket</button>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

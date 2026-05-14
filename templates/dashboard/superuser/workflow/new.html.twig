@@ -1,0 +1,160 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<style>
+.workflow-select-box {
+    height: 260px;
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid #d7dde8;
+    border-radius: 16px;
+    background: #fff;
+    padding: 10px;
+    margin-top: 10px;
+}
+
+.workflow-user-box {
+    height: 220px;
+    max-height: 220px;
+}
+
+.workflow-check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 15px;
+}
+
+.workflow-check-row:hover {
+    background: #fff7ed;
+}
+
+.workflow-check-row input {
+    width: 17px;
+    height: 17px;
+    margin-top: 3px;
+}
+
+.workflow-check-row span {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.workflow-check-row small {
+    color: #64748b;
+    font-size: 13px;
+}
+</style>
+
+<div class="workflow-page">
+    <div class="page-header">
+        <div>
+            <h2 class="page-title">Créer un workflow</h2>
+            <div class="page-desc">Création globale multi-services par le superuser.</div>
+        </div>
+    </div>
+
+    {% for message in app.flashes('error') %}
+        <div class="flash-error">{{ message }}</div>
+    {% endfor %}
+
+    <div class="card">
+        {{ form_start(form) }}
+
+        <div class="form-grid">
+            <div>
+                {{ form_label(form.title) }}
+                {{ form_widget(form.title) }}
+                {{ form_errors(form.title) }}
+            </div>
+
+            <div>
+                {{ form_label(form.actionType) }}
+                {{ form_widget(form.actionType) }}
+                {{ form_errors(form.actionType) }}
+            </div>
+
+            <div>
+                {{ form_label(form.deadlineAt) }}
+                {{ form_widget(form.deadlineAt) }}
+                {{ form_errors(form.deadlineAt) }}
+            </div>
+
+            <div class="full-width">
+                <label>Sites concernés</label>
+                <input type="text" id="siteSearch" class="form-control" placeholder="Rechercher un site...">
+
+                <div class="workflow-select-box" id="siteList">
+                    {% for site in availableSites %}
+                        <label class="workflow-check-row">
+                            <input type="checkbox" name="site_ids[]" value="{{ site.id }}">
+                            <span>
+                                <strong>{{ site.siteName }}</strong>
+                                <small>{{ site.serviceName ?: '-' }} | {{ site.typeTrans ?: '-' }} | Trafic {{ site.maxTrafic ?: '-' }}</small>
+                            </span>
+                        </label>
+                    {% endfor %}
+                </div>
+
+                <small class="muted">Cochez un ou plusieurs sites.</small>
+            </div>
+
+            <div class="full-width">
+                <label>Utilisateurs à assigner</label>
+                <input type="text" id="userSearch" class="form-control" placeholder="Rechercher user, service ou département...">
+
+                <div class="workflow-select-box workflow-user-box" id="userList">
+                    {% for user in availableUsers %}
+                        <label class="workflow-check-row">
+                            <input type="checkbox" name="assigned_user_ids[]" value="{{ user.id }}">
+                            <span>
+                                <strong>{{ user.username }}</strong>
+                                <small>{{ user.service ?: 'N/A' }} | {{ user.department ?: 'N/A' }}</small>
+                            </span>
+                        </label>
+                    {% endfor %}
+                </div>
+
+                <small class="muted">Chaque utilisateur sélectionné aura une tâche attribuée.</small>
+            </div>
+
+            <div class="full-width">
+                {{ form_label(form.description) }}
+                {{ form_widget(form.description) }}
+                {{ form_errors(form.description) }}
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <a href="{{ path('superuser_workflow_index') }}" class="btn">Retour</a>
+            <button class="btn btn-primary">Créer le workflow</button>
+        </div>
+
+        {{ form_end(form) }}
+    </div>
+</div>
+
+<script>
+function filterRows(inputId, listId) {
+    const input = document.getElementById(inputId);
+    const list = document.getElementById(listId);
+
+    if (!input || !list) return;
+
+    input.addEventListener('input', function () {
+        const q = input.value.toLowerCase();
+
+        list.querySelectorAll('.workflow-check-row').forEach(row => {
+            row.style.display = row.innerText.toLowerCase().includes(q) ? 'flex' : 'none';
+        });
+    });
+}
+
+filterRows('siteSearch', 'siteList');
+filterRows('userSearch', 'userList');
+</script>
+{% endblock %}
