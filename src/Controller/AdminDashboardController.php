@@ -13,24 +13,56 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/admin')]
 class AdminDashboardController extends AbstractController
 {
-    #[Route('/dashboard', name: 'admin_dashboard_home')]
-    public function adminDashboard(ProcessedSiteRepository $repo): Response
-    {
+     #[Route('/dashboard', name: 'admin_dashboard_home')]
+    public function adminDashboard(
+        Request $request,
+        ProcessedSiteRepository $repo
+    ): Response {
         $this->denyAccessUnlessGranted('ROLE_ADMIN');
 
-        $totalSites = $repo->countAllSites(null);
-        $criticalSites = $repo->countCriticalSites(null);
+        $serviceFilter = $request->query->get('service');
+        $classificationFilter = $request->query->get('classification');
+        $criticalFilter = $request->query->get('critical');
+
+        // Statistiques
+        $totalSites = $repo->countAllSites($serviceFilter);
+        $criticalSites = $repo->countCriticalSites($serviceFilter);
+        $criticalPercentage = $totalSites > 0 ? round(($criticalSites / $totalSites) * 100, 1) : 0;
+        $avgTraffic = round($repo->getAverageTraffic($serviceFilter), 1);
+
+        $serviceDistribution = $repo->getServiceDistribution();
+        $classificationStats = $repo->getClassificationStats($serviceFilter);
+
+        // Options pour les filtres
+        $allServices = array_keys($serviceDistribution);
+        $allClassifications = array_keys($repo->getClassificationStats(null));
+
+        // Sites avec coordonnées
+        $sites = $repo->findSitesWithCoordinates(
+            $serviceFilter,
+            $classificationFilter,
+            $criticalFilter
+        );
 
         return $this->render('dashboard/admin/home.html.twig', [
-            'sites' => $repo->findLatestSites(null, 100),
+            'sites' => $sites,
             'totalSites' => $totalSites,
             'criticalSites' => $criticalSites,
-            'classificationStats' => $repo->getClassificationStats(null),
-            'serviceDistribution' => $repo->getServiceDistribution(),
-            'avgTraffic' => round($repo->getAverageTraffic(null), 1),
-            'criticalPercentage' => $totalSites > 0 ? round(($criticalSites / $totalSites) * 100, 1) : 0,
+            'criticalPercentage' => $criticalPercentage,
+            'avgTraffic' => $avgTraffic,
+            'serviceDistribution' => $serviceDistribution,
+            'classificationStats' => $classificationStats,
+            'allServices' => $allServices,
+            'allClassifications' => $allClassifications,
+            'currentService' => $serviceFilter,
+            'currentClassification' => $classificationFilter,
+            'currentCritical' => $criticalFilter,
         ]);
     }
+
+    
+ 
+
 
     #[Route('/sites', name: 'admin_dashboard_sites')]
     public function adminSites(Request $request, ProcessedSiteRepository $repo): Response

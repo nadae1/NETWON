@@ -3,6 +3,8 @@
 namespace App\Controller;
 
 use App\Repository\ProcessedSiteRepository;
+
+use App\Repository\NotificationRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -133,21 +135,52 @@ class UserDashboardController extends AbstractController
         ]);
     }
 
-    #[Route('/user/alerts', name: 'user_dashboard_alerts')]
-    public function alerts(
-        ProcessedSiteRepository $processedSiteRepository
-    ): Response {
-        $this->denyAccessUnlessGranted('ROLE_USER');
 
-        /** @var \App\Entity\User $user */
-        $user = $this->getUser();
-        $userService = $user->getService();
-        
-        $criticalSites = $processedSiteRepository->findCriticalSites($userService, 50);
-        
-        return $this->render('dashboard/user/alerts.html.twig', [
-            'criticalSites' => $criticalSites,
-            'serviceName' => $userService ?: 'SHARED',
-        ]);
-    }
+
+
+
+    #[Route('/user/alerts', name: 'user_dashboard_alerts')]
+public function alerts(
+    ProcessedSiteRepository $processedSiteRepository,
+    NotificationRepository $notificationRepository
+): Response {
+    $this->denyAccessUnlessGranted('ROLE_USER');
+    $user = $this->getUser();
+    $userService = $user->getService();
+
+    $criticalSites = $processedSiteRepository->findCriticalSites($userService, 50);
+
+    // Notifications de l'utilisateur de type deadline_*
+    $notifications = $notificationRepository->createQueryBuilder('n')
+        ->where('n.user = :user')
+        ->andWhere('n.type LIKE :type')
+        ->setParameter('user', $user)
+        ->setParameter('type', 'deadline_%')
+        ->orderBy('n.createdAt', 'DESC')
+        ->setMaxResults(100)
+        ->getQuery()
+        ->getResult();
+
+    // Nombre de tickets en retard (distincts) pour cet utilisateur
+    $nbDelayAlerts = $notificationRepository->createQueryBuilder('n')
+        ->select('COUNT(DISTINCT n.ticket)')
+        ->where('n.user = :user')
+        ->andWhere('n.type LIKE :type')
+        ->setParameter('user', $user)
+        ->setParameter('type', 'deadline_%')
+        ->getQuery()
+        ->getSingleScalarResult();
+
+    $nbCriticalSites = count($criticalSites);
+
+    return $this->render('dashboard/user/alerts.html.twig', [
+        'criticalSites' => $criticalSites,
+        'notifications' => $notifications,
+        'serviceName' => $userService ?: 'SHARED',
+        'nbDelayAlerts' => $nbDelayAlerts,
+        'nbCriticalSites' => $nbCriticalSites,
+    ]);
+}
+
+
 }

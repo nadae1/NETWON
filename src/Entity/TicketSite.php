@@ -1,4 +1,5 @@
 <?php
+// src/Entity/TicketSite.php
 
 namespace App\Entity;
 
@@ -25,6 +26,9 @@ class TicketSite
     #[ORM\Column(length: 50, nullable: true)]
     private ?string $serviceName = null;
 
+    #[ORM\Column(length: 20, options: ['default' => 'pending'])]
+    private string $status = 'pending';
+
     public function getId(): ?int { return $this->id; }
 
     public function getTicket(): ?Ticket { return $this->ticket; }
@@ -38,4 +42,7 @@ class TicketSite
 
     public function getServiceName(): ?string { return $this->serviceName; }
     public function setServiceName(?string $serviceName): static { $this->serviceName = $serviceName; return $this; }
+
+    public function getStatus(): string { return $this->status; }
+    public function setStatus(string $status): static { $this->status = $status; return $this; }
 }

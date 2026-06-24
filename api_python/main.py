@@ -1,90 +1,74 @@
-# main.py
-from fastapi import FastAPI, UploadFile, File, HTTPException
+# api_python/main.py
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from typing import Optional
 from traitement import traiter_fichiers
+from capacite import traiter_capacite, traiter_capacite_fo, traiter_capacite_fh, traiter_capacite_backbone
 import uvicorn
+import os
+from datetime import datetime
 
 app = FastAPI(title="Orange 5G - Plan Data API", version="1.0.0")
 
-# CORS (باش Symfony ينجم يطلب API)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:8001",
-        "http://127.0.0.1:8001"
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# -----------------------------------
-# ROOT
-# -----------------------------------
 @app.get("/")
 async def root():
-    return {
-        "message": "API Orange 5G - Plan Data",
-        "status": "OK"
-    }
+    return {"message": "API Orange 5G - Plan Data", "status": "OK"}
 
-# -----------------------------------
-# HEALTH CHECK
-# -----------------------------------
 @app.get("/health")
 async def health():
-    return {
-        "status": "ok",
-        "service": "FastAPI"
-    }
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
 
-# -----------------------------------
-# TRAITEMENT PRINCIPAL
-# -----------------------------------
 @app.post("/traiter")
 async def traiter(
     trafic: UploadFile = File(...),
-    port: UploadFile = File(...),
-    type_liaison: UploadFile = File(...)
+    port: Optional[UploadFile] = File(None),
+    type_liaison: Optional[UploadFile] = File(None),
+    gps: Optional[UploadFile] = File(None),
 ):
     try:
-        # قراءة الملفات
-        trafic_content = await trafic.read()
-        port_content = await port.read()
-        type_content = await type_liaison.read()
-
-        # check files empty
-        if not trafic_content or not port_content or not type_content:
-            raise HTTPException(status_code=400, detail="Fichiers vides ou invalides")
-
-        # appel traitement
-        resultats = traiter_fichiers(
-            trafic_content,
-            port_content,
-            type_content
-        )
-
-        # check result
-        if resultats.get("status") != "success":
-            raise HTTPException(status_code=500, detail=resultats.get("message"))
-
-        return resultats
-
+        trafic_content = await trafic.read() if trafic else None
+        port_content = await port.read() if port else None
+        type_content = await type_liaison.read() if type_liaison else None
+        gps_content = await gps.read() if gps else None
+        result = traiter_fichiers(trafic_content, port_content, type_content, gps_content)
+        return JSONResponse(content=result)
     except Exception as e:
-        raise HTTPException(
+        import traceback
+        return JSONResponse(
             status_code=500,
-            detail=f"Erreur traitement: {str(e)}"
+            content={"status": "error", "message": str(e), "detail": traceback.format_exc()}
         )
 
-# -----------------------------------
-# RUN SERVER
-# -----------------------------------
+@app.post("/capacite/fo")
+async def importer_capacite_fo(fichier: UploadFile = File(...)):
+    content = await fichier.read()
+    return traiter_capacite_fo(content)
+
+@app.post("/capacite/fh")
+async def importer_capacite_fh(fichier: UploadFile = File(...)):
+    content = await fichier.read()
+    return traiter_capacite_fh(content)
+
+@app.post("/capacite/backbone")
+async def importer_capacite_backbone(fichier: UploadFile = File(...)):
+    content = await fichier.read()
+    return traiter_capacite_backbone(content)
+
+# Endpoint pour un fichier unique (tous services)
+@app.post("/capacite/all")
+async def importer_capacite_unique(fichier: UploadFile = File(...)):
+    from capacite import traiter_capacite_unique
+    content = await fichier.read()
+    return traiter_capacite_unique(content)
+
 if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8001,
-        reload=True
-    )
+    uvicorn.run(app, host="0.0.0.0", port=8001)

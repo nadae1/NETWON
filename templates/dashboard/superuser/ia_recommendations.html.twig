@@ -7,7 +7,7 @@
     background: white;
     border-radius: 16px;
     padding: 20px;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
     border-left: 4px solid;
     transition: all 0.2s;
 }
@@ -31,41 +31,47 @@
 .badge-high { background: #fff1f2; color: #ef4444; }
 .badge-medium { background: #fffbeb; color: #f59e0b; }
 .badge-low { background: #ecfdf5; color: #10b981; }
-.action-checkbox { margin-right: 12px; transform: scale(1.2); }
-.action-select { padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd5e1; }
+.mini-graph { width: 200px; height: 60px; margin-top: 8px; cursor: pointer; }
 .btn-primary { background: #3b82f6; color: white; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
-.btn-secondary { background: #f1f5f9; color: #475569; padding: 12px 24px; border-radius: 8px; text-decoration: none; }
-.global-stats { display: flex; gap: 20px; margin-bottom: 24px; flex-wrap: wrap; }
-.stat-chip { background: #f1f5f9; padding: 8px 16px; border-radius: 30px; font-size: 14px; }
+.btn-secondary { background: #f1f5f9; color: #475569; padding: 6px 12px; border-radius: 6px; text-decoration: none; }
+.modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
+.modal-content { background: white; margin: 5% auto; padding: 20px; width: 80%; max-width: 900px; border-radius: 16px; }
+.close { float: right; font-size: 28px; cursor: pointer; }
+.chart-container { display: flex; gap: 20px; justify-content: space-around; margin-top: 20px; flex-wrap: wrap; }
+.chart-box { flex: 1; min-width: 300px; }
 </style>
 
 <div class="recommendations-page">
     <div class="page-header">
         <div>
-            <h2 class="page-title">🤖 Recommandations IA</h2>
-            <div class="page-desc">Actions suggérées par l'intelligence artificielle pour les sites critiques</div>
+            <h2 class="page-title">🤖 Plan d'action IA</h2>
+            <div class="page-desc">Sélectionnez les sites pour lesquels créer un workflow</div>
         </div>
-        <div>
-            <a href="{{ path('superuser_plan_data') }}" class="btn-secondary">← Retour</a>
-        </div>
+        <a href="{{ path('superuser_plan_data') }}" class="btn-secondary">← Retour</a>
     </div>
 
     <!-- Statistiques globales -->
-    <div class="global-stats">
-        <div class="stat-chip">📊 Total sites analysés: {{ recommendations|length }}</div>
+    <div class="global-stats" style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+        <div class="stat-chip">📊 Total analysés: {{ recommendations|length }}</div>
         <div class="stat-chip">🔴 Critiques: {{ globalStats.critical ?? 0 }}</div>
         <div class="stat-chip">🟠 Haut risque: {{ globalStats.high ?? 0 }}</div>
         <div class="stat-chip">🟡 Moyen: {{ globalStats.medium ?? 0 }}</div>
         <div class="stat-chip">🟢 Faible: {{ globalStats.low ?? 0 }}</div>
     </div>
 
-    <form method="post" action="{{ path('superuser_ia_recommendations') }}">
+    <form method="post" id="actionForm">
+        <!-- Mode de sélection -->
+        <div style="background: #f8fafc; padding: 15px; border-radius: 12px; margin-bottom: 20px;">
+            <label><input type="radio" name="selection_mode" value="top10" checked> Top 10 des sites les plus critiques</label>
+            <label style="margin-left: 20px;"><input type="radio" name="selection_mode" value="manual"> Sélection manuelle</label>
+        </div>
+
         {% for rec in recommendations %}
-            <div class="recommendation-card" style="border-left-color: {{ rec.borderColor }}">
+            <div class="recommendation-card" data-site-index="{{ loop.index0 }}" style="border-left-color: {{ rec.borderColor }}">
                 <div class="recommendation-header">
                     <div>
-                        <input type="checkbox" name="actions[{{ rec.siteId }}][selected]" class="action-checkbox" id="site_{{ rec.siteId }}">
-                        <label for="site_{{ rec.siteId }}" class="site-name">{{ rec.siteName }}</label>
+                        <input type="checkbox" name="selected_sites[]" value="{{ rec.siteId }}" class="site-checkbox" style="margin-right: 10px;">
+                        <span class="site-name">{{ rec.siteName }}</span>
                         {% if rec.pairedSiteName %}
                             <span class="muted">(pairé: {{ rec.pairedSiteName }})</span>
                         {% endif %}
@@ -87,8 +93,14 @@
                     {{ rec.description }}
                 </div>
 
-                <div>
-                    <strong>Actions recommandées:</strong>
+                <!-- Mini graphique et bouton popup -->
+                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                    <canvas class="mini-graph" data-site-id="{{ rec.siteId }}" data-type="current" width="200" height="60" style="border:1px solid #eee;"></canvas>
+                    <button type="button" class="show-graphs-btn" data-site-id="{{ rec.siteId }}" data-site-name="{{ rec.siteName }}" style="background: none; border: 1px solid #3b82f6; padding: 4px 8px; border-radius: 6px; cursor: pointer;">📊 Voir avant/après</button>
+                </div>
+
+                <div style="margin-top: 12px;">
+                    <strong>Action recommandée:</strong>
                     <select name="actions[{{ rec.siteId }}][action_type]" class="action-select" style="margin-left: 10px;">
                         {% for action in rec.recommendedActions %}
                             <option value="{{ action.type }}" {% if loop.first %}selected{% endif %}>
@@ -103,30 +115,170 @@
                         <option value="low">🟢 Basse</option>
                     </select>
                 </div>
-
                 <div style="margin-top: 8px; font-size: 12px; color: #64748b;">
-Équipes impliquées: {{ rec.recommendedActions|first.teams|default([])|join(', ') }}                </div>
+                    Équipes impliquées: {{ rec.recommendedActions|first.teams|default([])|join(', ') }}
+                </div>
             </div>
         {% else %}
-            <div class="card">
-                <div class="empty-state">Aucune recommandation IA pour le moment.</div>
-            </div>
+            <div class="card"><div class="empty-state">Aucune recommandation IA pour le moment.</div></div>
         {% endfor %}
 
         {% if recommendations is not empty %}
             <div style="margin-top: 30px; text-align: center;">
+            <div class="form-group" style="margin: 20px 0; text-align: center;">
+    <label>Date limite (optionnelle) :</label>
+    <input type="date" name="deadline" class="form-control" style="display: inline-block; width: auto; margin-left: 10px;">
+</div>
                 <button type="submit" class="btn-primary">✅ Valider et créer le workflow</button>
             </div>
         {% endif %}
     </form>
 </div>
 
+<!-- Modal pour afficher les graphiques avant/après -->
+<div id="graphModal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Graphiques de trafic - <span id="modalSiteName"></span></h2>
+        <div class="chart-container">
+            <div class="chart-box">
+                <h3>Situation actuelle</h3>
+                <canvas id="currentChart" width="400" height="200"></canvas>
+            </div>
+            <div class="chart-box">
+                <h3>Après action recommandée</h3>
+                <canvas id="afterChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Sélectionner/désélectionner tous les sites
-document.querySelectorAll('.action-checkbox').forEach(cb => {
-    cb.addEventListener('change', function() {
-        // Optionnel: logique de sélection globale
+    const trafficData = {
+        {% for rec in recommendations %}
+            "{{ rec.siteId }}": {
+                current: { labels: {{ rec.currentTrafficData.labels|json_encode|raw }}, values: {{ rec.currentTrafficData.values|json_encode|raw }} },
+                after: { labels: {{ rec.afterActionData.labels|json_encode|raw }}, values: {{ rec.afterActionData.values|json_encode|raw }} }
+            },
+        {% endfor %}
+    };
+
+    function drawMiniGraph(canvas, data) {
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width, height = canvas.height;
+        ctx.clearRect(0, 0, width, height);
+        const maxVal = Math.max(...data.values, 1);
+        const stepX = width / (data.labels.length - 1);
+        ctx.beginPath();
+        ctx.moveTo(0, height - (data.values[0] / maxVal) * height);
+        for (let i = 1; i < data.values.length; i++) {
+            ctx.lineTo(i * stepX, height - (data.values[i] / maxVal) * height);
+        }
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    document.querySelectorAll('.mini-graph[data-type="current"]').forEach(canvas => {
+        const siteId = canvas.dataset.siteId;
+        if (trafficData[siteId] && trafficData[siteId].current) {
+            drawMiniGraph(canvas, trafficData[siteId].current);
+        }
     });
-});
+
+    const modal = document.getElementById('graphModal');
+    const closeBtn = document.querySelector('.close');
+    let currentChart = null, afterChart = null;
+
+    function showGraphs(siteId, siteName) {
+        const data = trafficData[siteId];
+        if (!data) return;
+        document.getElementById('modalSiteName').innerText = siteName;
+        if (currentChart) currentChart.destroy();
+        if (afterChart) afterChart.destroy();
+        const ctxCurrent = document.getElementById('currentChart').getContext('2d');
+        const ctxAfter = document.getElementById('afterChart').getContext('2d');
+        currentChart = new Chart(ctxCurrent, {
+            type: 'line',
+            data: {
+                labels: data.current.labels,
+                datasets: [{ label: 'Trafic (Mbps)', data: data.current.values, borderColor: '#ef4444', tension: 0.2 }]
+            },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+        afterChart = new Chart(ctxAfter, {
+            type: 'line',
+            data: {
+                labels: data.after.labels,
+                datasets: [{ label: 'Trafic simulé après action', data: data.after.values, borderColor: '#10b981', tension: 0.2 }]
+            },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+        modal.style.display = 'block';
+    }
+
+    document.querySelectorAll('.show-graphs-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const siteId = btn.dataset.siteId;
+            const siteName = btn.dataset.siteName;
+            showGraphs(siteId, siteName);
+        });
+    });
+
+    closeBtn.onclick = () => { modal.style.display = 'none'; };
+    window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; };
+
+    // Gestion de l'affichage Top 10 / Sélection manuelle
+    const modeRadios = document.querySelectorAll('input[name="selection_mode"]');
+    const allCards = document.querySelectorAll('.recommendation-card');
+    const checkboxes = document.querySelectorAll('.site-checkbox');
+
+    function updateVisibility() {
+        const mode = document.querySelector('input[name="selection_mode"]:checked').value;
+        const isManual = (mode === 'manual');
+        allCards.forEach((card, idx) => {
+            if (mode === 'top10') {
+                card.style.display = idx < 10 ? 'block' : 'none';
+                const cb = card.querySelector('.site-checkbox');
+                if (cb) {
+                    cb.disabled = true;
+                    cb.checked = false;
+                }
+            } else {
+                card.style.display = 'block';
+                const cb = card.querySelector('.site-checkbox');
+                if (cb) cb.disabled = false;
+            }
+        });
+    }
+
+    function updateCheckboxesEnabled() {
+        const isManual = document.querySelector('input[name="selection_mode"]:checked').value === 'manual';
+        checkboxes.forEach(cb => cb.disabled = !isManual);
+        if (!isManual) {
+            checkboxes.forEach(cb => cb.checked = false);
+        }
+    }
+
+    modeRadios.forEach(radio => radio.addEventListener('change', () => {
+        updateVisibility();
+        updateCheckboxesEnabled();
+    }));
+    updateVisibility();
+    updateCheckboxesEnabled();
+
+    document.getElementById('actionForm').addEventListener('submit', function(e) {
+        const mode = document.querySelector('input[name="selection_mode"]:checked').value;
+        if (mode === 'top10') {
+            checkboxes.forEach(cb => cb.checked = false);
+            allCards.forEach((card, idx) => {
+                if (idx < 10) {
+                    const cb = card.querySelector('.site-checkbox');
+                    if (cb) cb.checked = true;
+                }
+            });
+        }
+    });
 </script>
 {% endblock %}

@@ -2,7 +2,7 @@
 
 {% block title %}Tickets Backhaul{% endblock %}
 
-{% block content %}
+{% block dashboard_content %}
 <div class="container mx-auto p-4">
     <h1 class="text-3xl font-bold mb-6">Tickets Backhaul</h1>
 
@@ -25,11 +25,11 @@
                         <span class="text-xs text-gray-500">{{ ticket.createdAt|date('d/m/Y H:i') }}</span>
                     </div>
 
-                    {% if ticket.ticketTasks %}
+                    {% if ticket.tasks %}
                         <div class="text-xs text-gray-700">
-                            <strong>Tâches:</strong> {{ ticket.ticketTasks|length }} - 
-                            {% set completed = ticket.ticketTasks|filter(t => t.status == 'done')|length %}
-                            Complétées: {{ completed }}/{{ ticket.ticketTasks|length }}
+                            <strong>Tâches:</strong> {{ ticket.tasks|length }} - 
+                            {% set completed = ticket.tasks|filter(t => t.status == 'done')|length %}
+                            Complétées: {{ completed }}/{{ ticket.tasks|length }}
                         </div>
                     {% endif %}
                 </a>

@@ -12,26 +12,26 @@ class TicketWorkflowService
 {
     public function __construct(private EntityManagerInterface $em) {}
 
+   
+   
     public function refreshTicketProgress(Ticket $ticket): void
     {
         $tasks = $ticket->getTasks();
         $total = count($tasks);
-
         if ($total === 0) {
             $ticket->setProgress(0);
             return;
         }
 
-        $done = 0;
+        $completed = 0;
         foreach ($tasks as $task) {
-            if ($task->getStatus() === TicketTask::STATUS_DONE) {
-                $done++;
+            if (in_array($task->getStatus(), ['completed', 'done'])) {
+                $completed++;
             }
         }
 
-        $ticket->setProgress((int) round(($done / $total) * 100));
-        $ticket->setUpdatedAt(new \DateTime());
-        $this->em->flush();
+        $progress = (int) round(($completed / $total) * 100);
+        $ticket->setProgress($progress);
     }
 
     public function canAccessTicket(Ticket $ticket, User $user): bool
@@ -84,4 +84,20 @@ class TicketWorkflowService
 
         return $history;
     }
+    
+
+    public function moveToNextTask(TicketTask $currentTask, User $nextUser, string $nextStepCode): TicketTask
+{
+    $nextTask = new TicketTask();
+    $nextTask->setTicket($currentTask->getTicket());
+    $nextTask->setTitle('Suite du workflow');
+    $nextTask->setDescription($currentTask->getDescription());
+    $nextTask->setAssignedTo($nextUser);
+    $nextTask->setStatus('pending');
+    $nextTask->setStepOrder($currentTask->getStepOrder() + 1);
+    $nextTask->setStepCode($nextStepCode);
+    $nextTask->setServiceName($nextUser->getService());
+    $this->em->persist($nextTask);
+    return $nextTask;
+}
 }

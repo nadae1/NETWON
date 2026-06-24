@@ -20,33 +20,13 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/admin')]
 class AdminController extends AbstractController
 {
-    #[Route('/dashboard', name: 'admin_dashboard', methods: ['GET'])]
-    public function dashboard(
-        UserRepository $userRepository,
-        ServiceRepository $serviceRepository,
-        TicketRepository $ticketRepository,
-        NotificationRepository $notificationRepository
-    ): Response {
-        $this->denyAccessUnlessGranted('ROLE_ADMIN');
-
-        $stats = [
-            'total_users' => count($userRepository->findAll()),
-            'total_services' => count($serviceRepository->findAll()),
-            'total_tickets' => count($ticketRepository->findAll()),
-            'open_tickets' => count($ticketRepository->findBy(['status' => 'open'])),
-            'pending_notifications' => count($notificationRepository->findBy(['isRead' => false])),
-        ];
-
-        return $this->render('dashboard/admin/dashboard.html.twig', ['stats' => $stats]);
-    }
+    // La méthode management() a été supprimée
 
     #[Route('/users', name: 'admin_users', methods: ['GET'])]
     public function listUsers(UserRepository $userRepository): Response
     {
         $this->denyAccessUnlessGranted('ROLE_ADMIN');
-
         $users = $userRepository->findAll();
-
         return $this->render('dashboard/admin/users.html.twig', ['users' => $users]);
     }
 
@@ -57,7 +37,6 @@ class AdminController extends AbstractController
         UserPasswordHasherInterface $passwordHasher
     ): Response {
         $this->denyAccessUnlessGranted('ROLE_ADMIN');
-
         $user = new User();
         $form = $this->createForm(AdminUserType::class, $user);
         $form->handleRequest($request);
@@ -68,12 +47,9 @@ class AdminController extends AbstractController
                 $hashedPassword = $passwordHasher->hashPassword($user, $plainPassword);
                 $user->setPassword($hashedPassword);
             }
-
             $em->persist($user);
             $em->flush();
-
             $this->addFlash('success', sprintf('Utilisateur %s créé avec succès.', $user->getUsername()));
-
             return $this->redirectToRoute('admin_users');
         }
 
@@ -91,7 +67,6 @@ class AdminController extends AbstractController
         UserPasswordHasherInterface $passwordHasher
     ): Response {
         $this->denyAccessUnlessGranted('ROLE_ADMIN');
-
         $form = $this->createForm(AdminUserType::class, $user);
         $form->handleRequest($request);
 
@@ -101,10 +76,8 @@ class AdminController extends AbstractController
                 $hashedPassword = $passwordHasher->hashPassword($user, $plainPassword);
                 $user->setPassword($hashedPassword);
             }
-
             $em->flush();
             $this->addFlash('success', sprintf('Utilisateur %s mis à jour.', $user->getUsername()));
-
             return $this->redirectToRoute('admin_users');
         }
 
@@ -118,13 +91,10 @@ class AdminController extends AbstractController
     public function deleteUser(User $user, EntityManagerInterface $em): Response
     {
         $this->denyAccessUnlessGranted('ROLE_ADMIN');
-
         $username = $user->getUsername();
         $em->remove($user);
         $em->flush();
-
         $this->addFlash('success', sprintf('Utilisateur %s supprimé.', $username));
-
         return $this->redirectToRoute('admin_users');
     }
 
@@ -132,9 +102,7 @@ class AdminController extends AbstractController
     public function listServices(ServiceRepository $serviceRepository): Response
     {
         $this->denyAccessUnlessGranted('ROLE_ADMIN');
-
         $services = $serviceRepository->findAll();
-
         return $this->render('dashboard/admin/services.html.twig', ['services' => $services]);
     }
 
@@ -142,7 +110,6 @@ class AdminController extends AbstractController
     public function newService(Request $request, EntityManagerInterface $em): Response
     {
         $this->denyAccessUnlessGranted('ROLE_ADMIN');
-
         $service = new Service();
         $form = $this->createForm(ServiceType::class, $service);
         $form->handleRequest($request);
@@ -150,9 +117,7 @@ class AdminController extends AbstractController
         if ($form->isSubmitted() && $form->isValid()) {
             $em->persist($service);
             $em->flush();
-
             $this->addFlash('success', sprintf('Service %s créé avec succès.', $service->getName()));
-
             return $this->redirectToRoute('admin_services');
         }
 
@@ -169,14 +134,12 @@ class AdminController extends AbstractController
         EntityManagerInterface $em
     ): Response {
         $this->denyAccessUnlessGranted('ROLE_ADMIN');
-
         $form = $this->createForm(ServiceType::class, $service);
         $form->handleRequest($request);
 
         if ($form->isSubmitted() && $form->isValid()) {
             $em->flush();
             $this->addFlash('success', sprintf('Service %s mis à jour.', $service->getName()));
-
             return $this->redirectToRoute('admin_services');
         }
 
@@ -190,9 +153,7 @@ class AdminController extends AbstractController
     public function notificationLogs(NotificationRepository $repository): Response
     {
         $this->denyAccessUnlessGranted('ROLE_ADMIN');
-
         $notifications = $repository->findBy([], ['createdAt' => 'DESC'], 100);
-
         return $this->render('dashboard/admin/notifications.html.twig', ['notifications' => $notifications]);
     }
 
@@ -202,7 +163,6 @@ class AdminController extends AbstractController
         UserRepository $userRepository
     ): Response {
         $this->denyAccessUnlessGranted('ROLE_ADMIN');
-
         $statsByService = [];
         $statsByStatus = [];
         $allTickets = $ticketRepository->findAll();
@@ -210,7 +170,6 @@ class AdminController extends AbstractController
         foreach ($allTickets as $ticket) {
             $service = $ticket->getService() ?? 'N/A';
             $statsByService[$service] = ($statsByService[$service] ?? 0) + 1;
-
             $status = $ticket->getStatus() ?? 'N/A';
             $statsByStatus[$status] = ($statsByStatus[$status] ?? 0) + 1;
         }

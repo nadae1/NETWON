@@ -38,28 +38,18 @@ class CreateUserCommand extends Command
         $usernameQuestion = new Question('Username: ');
         $usernameQuestion->setValidator(function (?string $value) {
             $value = trim((string) $value);
-
-            if ($value === '') {
-                throw new \RuntimeException('Le username est obligatoire.');
-            }
-
-            if (mb_strlen($value) > 100) {
-                throw new \RuntimeException('Le username est trop long.');
-            }
-
+            if ($value === '') throw new \RuntimeException('Le username est obligatoire.');
+            if (mb_strlen($value) > 100) throw new \RuntimeException('Le username est trop long.');
             if (!preg_match('/^[A-Za-z0-9._-]+$/', $value)) {
                 throw new \RuntimeException('Le username contient des caractères non autorisés.');
             }
-
             return $value;
         });
-
         $username = $helper->ask($input, $output, $usernameQuestion);
 
         $existingUser = $this->entityManager
             ->getRepository(User::class)
             ->findOneBy(['username' => $username]);
-
         if ($existingUser) {
             $output->writeln('<error>Un utilisateur avec ce username existe déjà.</error>');
             return Command::FAILURE;
@@ -70,22 +60,11 @@ class CreateUserCommand extends Command
         $passwordQuestion->setHiddenFallback(false);
         $passwordQuestion->setValidator(function (?string $value) {
             $value = (string) $value;
-
-            if ($value === '') {
-                throw new \RuntimeException('Le mot de passe est obligatoire.');
-            }
-
-            if (mb_strlen($value) < 6) {
-                throw new \RuntimeException('Le mot de passe doit contenir au moins 6 caractères.');
-            }
-
-            if (mb_strlen($value) > 255) {
-                throw new \RuntimeException('Le mot de passe est trop long.');
-            }
-
+            if ($value === '') throw new \RuntimeException('Le mot de passe est obligatoire.');
+            if (mb_strlen($value) < 6) throw new \RuntimeException('Le mot de passe doit contenir au moins 6 caractères.');
+            if (mb_strlen($value) > 255) throw new \RuntimeException('Le mot de passe est trop long.');
             return $value;
         });
-
         $password = $helper->ask($input, $output, $passwordQuestion);
 
         $roleQuestion = new ChoiceQuestion(
@@ -98,7 +77,6 @@ class CreateUserCommand extends Command
             'ROLE_USER'
         );
         $roleQuestion->setErrorMessage('Rôle invalide.');
-
         $selectedRole = $helper->ask($input, $output, $roleQuestion);
 
         $service = null;
@@ -115,20 +93,25 @@ class CreateUserCommand extends Command
                 'FO'
             );
             $serviceQuestion->setErrorMessage('Service invalide.');
-
             $service = $helper->ask($input, $output, $serviceQuestion);
 
             $departmentChoices = match ($service) {
                 'FO' => [
-                    'support_fo' => 'support_fo',
                     'ingenierie_ip' => 'ingenierie_ip',
+                    'deploiement' => 'deploiement',
+                    'support_radio' => 'support_radio',
+                    'support_backhaul' => 'support_backhaul',
+                    'ingenierie_cap' => 'ingenierie_cap',
                 ],
                 'FH' => [
-                    'support_fh' => 'support_fh',
                     'ingenierie_fh' => 'ingenierie_fh',
+                    'ingenierie_ip' => 'ingenierie_ip',
+                    'support_radio' => 'support_radio',
+                    'deploiement_telecom' => 'deploiement_telecom',
                 ],
                 'SHARED' => [
-                    'deploiement' => 'deploiement',
+                    'deploiement_shared' => 'deploiement_shared',
+                    'operateur' => 'operateur',
                 ],
                 default => [],
             };
@@ -139,29 +122,17 @@ class CreateUserCommand extends Command
                 array_key_first($departmentChoices)
             );
             $departmentQuestion->setErrorMessage('Département invalide.');
-
             $department = $helper->ask($input, $output, $departmentQuestion);
         }
 
         $emailQuestion = new Question('Email (optionnel): ', '');
         $emailQuestion->setValidator(function (?string $value) {
             $value = trim((string) $value);
-
-            if ($value === '') {
-                return null;
-            }
-
-            if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {
-                throw new \RuntimeException('Email invalide.');
-            }
-
-            if (mb_strlen($value) > 180) {
-                throw new \RuntimeException('Email trop long.');
-            }
-
+            if ($value === '') return null;
+            if (!filter_var($value, FILTER_VALIDATE_EMAIL)) throw new \RuntimeException('Email invalide.');
+            if (mb_strlen($value) > 180) throw new \RuntimeException('Email trop long.');
             return $value;
         });
-
         $email = $helper->ask($input, $output, $emailQuestion);
 
         $user = new User();
@@ -170,7 +141,6 @@ class CreateUserCommand extends Command
         $user->setService($service);
         $user->setDepartment($department);
         $user->setEmail($email);
-
         $hashedPassword = $this->passwordHasher->hashPassword($user, $password);
         $user->setPassword($hashedPassword);
 

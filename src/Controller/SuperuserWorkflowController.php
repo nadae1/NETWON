@@ -25,17 +25,10 @@ class SuperuserWorkflowController extends AbstractController
     public function index(Request $request, TicketRepository $ticketRepository): Response
     {
         $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
-
         $status = $request->query->get('status');
         $allowedStatuses = ['open', 'in_progress', 'completed', 'closed', 'blocked'];
-
-        if ($status && !in_array($status, $allowedStatuses, true)) {
-            $status = null;
-        }
-
-        // For superusers, show all tickets or filter by status
+        if ($status && !in_array($status, $allowedStatuses, true)) $status = null;
         $tickets = $ticketRepository->findByStatusOrdered($status);
-
         return $this->render('dashboard/superuser/workflow/index.html.twig', [
             'tickets' => $tickets,
             'currentStatus' => $status,
@@ -46,13 +39,8 @@ class SuperuserWorkflowController extends AbstractController
     public function show(Ticket $ticket): Response
     {
         $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
-
-        return $this->render('dashboard/superuser/workflow/show.html.twig', [
-            'ticket' => $ticket,
-        ]);
+        return $this->render('dashboard/superuser/workflow/show.html.twig', ['ticket' => $ticket]);
     }
-
-   
 
     #[Route('/new', name: 'superuser_workflow_new', methods: ['GET', 'POST'])]
     public function new(
@@ -62,7 +50,7 @@ class SuperuserWorkflowController extends AbstractController
         WorkflowEngineService $engine,
         ProcessedSiteRepository $processedSiteRepository,
         NotificationService $notificationService,
-        WorkflowAutoAssigner $autoAssigner  // <- NOUVEAU
+        WorkflowAutoAssigner $autoAssigner
     ): Response {
         $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
 
@@ -87,13 +75,15 @@ class SuperuserWorkflowController extends AbstractController
             $ticket->setCreatedAt(new \DateTime());
             $ticket->setUpdatedAt(new \DateTime());
 
+            $deadline = $form->get('deadline')->getData();
+            if ($deadline) $ticket->setDeadline($deadline);
+
             $em->persist($ticket);
 
             $selectedSites = [];
             foreach ($selectedSiteIds as $siteId) {
-                $processedSite = $processedSiteRepository->find((int) $siteId);
+                $processedSite = $processedSiteRepository->find((int)$siteId);
                 if (!$processedSite) continue;
-
                 $ticketSite = new TicketSite();
                 $ticketSite->setTicket($ticket);
                 $ticketSite->setSiteName($processedSite->getSiteName());
@@ -103,24 +93,17 @@ class SuperuserWorkflowController extends AbstractController
                 $selectedSites[] = $processedSite;
             }
 
-            // =====================================================
-            // Assignation automatique des utilisateurs en fonction des tâches
-            // =====================================================
             $assignedUsers = $autoAssigner->assignUsersForSites($selectedSites, $ticket, $currentUser);
 
-            // Mise à jour de la progression et historique
             $ticketWorkflowService->refreshTicketProgress($ticket);
             $ticketWorkflowService->addHistory(
                 $ticket,
                 $currentUser,
                 'ticket_created',
-                sprintf('Workflow créé automatiquement avec %d site(s) et %d utilisateur(s) assigné(s).',
-                    count($selectedSites), count($assignedUsers))
+                sprintf('Workflow créé avec %d site(s) et %d utilisateur(s) assigné(s).', count($selectedSites), count($assignedUsers))
             );
 
             $em->flush();
-
-            // Notifications
             if (!empty($assignedUsers)) {
                 $notificationService->notifyWorkflowAssignment($ticket, $assignedUsers, count($assignedUsers));
                 $em->flush();
@@ -130,28 +113,25 @@ class SuperuserWorkflowController extends AbstractController
             return $this->redirectToRoute('superuser_workflow_show', ['id' => $ticket->getId()]);
         }
 
-        // ... reste de la méthode inchangé (rendu du formulaire)
         return $this->render('dashboard/superuser/workflow/new.html.twig', [
             'form' => $form->createView(),
             'availableSites' => $availableSites,
-            'users' => [], // plus utilisé, mais gardé pour compatibilité template
+            'users' => [],
             'availableUsers' => [],
             'currentService' => $request->query->get('service'),
         ]);
-
-        
     }
 
     private function getBlockerInfo(Ticket $ticket): ?array
-{
-    if ($ticket->getStatus() === 'waiting_capillaire') {
-        return ['service' => 'Ingénierie Capillaire', 'user' => null];
+    {
+        if ($ticket->getStatus() === 'waiting_capillaire') return ['service' => 'Ingénierie Capillaire', 'user' => null];
+        if ($ticket->getStatus() === 'waiting_swap') return ['service' => 'Ingénierie IP (swap)', 'user' => null];
+        if ($ticket->getStatus() === 'waiting_other_service') return ['service' => 'Autre service', 'user' => null];
+        foreach ($ticket->getTasks() as $task) {
+            if ($task->getStatus() === 'blocked') {
+                return ['service' => $task->getServiceName(), 'user' => $task->getAssignedTo(), 'since' => $task->getUpdatedAt() ?? $task->getCreatedAt()];
+            }
+        }
+        return null;
     }
-    if ($ticket->getStatus() === 'waiting_swap') {
-        return ['service' => 'Ingénierie IP (swap)', 'user' => null];
-    }
-    // ... le reste
-}
-
-
 }

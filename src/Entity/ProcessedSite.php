@@ -65,6 +65,75 @@ class ProcessedSite
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $siteStatus = null; // 'critical', 'secured', 'warning'
 
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $latitude = null;
+
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $longitude = null;
+
+    #[ORM\Column(type: 'datetime', nullable: true)]
+    private ?\DateTimeInterface $supervisionUntil = null;
+
+    public function getSupervisionUntil(): ?\DateTimeInterface
+    {
+        return $this->supervisionUntil;
+    }
+    public function setSupervisionUntil(?\DateTimeInterface $supervisionUntil): self
+    {
+        $this->supervisionUntil = $supervisionUntil;
+        return $this;
+    }
+
+    #[ORM\Column(name: 'capacite_mbps', type: 'decimal', precision: 15, scale: 2, nullable: true)]
+    private ?float $capaciteMbps = null;
+
+    #[ORM\Column(type: 'datetime', nullable: true)]
+    private ?\DateTimeInterface $observationUntil = null;
+
+    public function getObservationUntil(): ?\DateTimeInterface
+    {
+        return $this->observationUntil;
+    }
+    public function setObservationUntil(?\DateTimeInterface $observationUntil): self
+    {
+        $this->observationUntil = $observationUntil;
+        return $this;
+    }
+    public function getCapaciteMbps(): ?float
+    {
+        return $this->capaciteMbps;
+    }
+
+    public function setCapaciteMbps(?float $capaciteMbps): self
+    {
+        $this->capaciteMbps = $capaciteMbps;
+        return $this;
+    }
+
+
+    public function getLatitude(): ?string
+    {
+        return $this->latitude;
+    }
+    public function setLatitude(?string $lat): self
+    {
+        $this->latitude = $lat;
+        return $this;
+    }
+
+
+    public function getLongitude(): ?string
+    {
+        return $this->longitude;
+    }
+    public function setLongitude(?string $lng): self
+    {
+        $this->longitude = $lng;
+        return $this;
+    }
+
+
+
 
     // getter / setter
     public function getRecommendedAction(): ?string

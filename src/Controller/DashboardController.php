@@ -10,7 +10,7 @@ use Symfony\Component\Routing\Attribute\Route;
 
 class DashboardController extends AbstractController
 {
-    #[Route('/dashboard', name: 'user_dashboard')]
+    #[Route('/dashboard', name: 'legacy_user_dashboard')]
     public function userDashboard(
         ProcessedSiteRepository $processedSiteRepository
     ): Response {
@@ -46,7 +46,7 @@ class DashboardController extends AbstractController
         ]);
     }
 
-    #[Route('/dashboard/sites', name: 'user_dashboard_sites')]
+    #[Route('/dashboard/sites', name: 'legacy_user_dashboard_sites')]
     public function userSites(
         Request $request,
         ProcessedSiteRepository $processedSiteRepository
@@ -85,7 +85,7 @@ class DashboardController extends AbstractController
         ]);
     }
 
-    #[Route('/dashboard/import', name: 'dashboard_import')]
+    #[Route('/dashboard/import', name: 'legacy_dashboard_import')]
     public function importForm(): Response
     {
         $this->denyAccessUnlessGranted('ROLE_USER');

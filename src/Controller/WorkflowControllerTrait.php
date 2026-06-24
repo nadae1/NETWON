@@ -56,6 +56,42 @@ trait WorkflowControllerTrait
         );
     }
 
+    protected function saveCommentFromRequest(
+        Ticket $ticket,
+        Request $request,
+        EntityManagerInterface $em,
+        NotificationService $notificationService
+    ): void {
+        $message = trim((string) $request->request->get('comment', ''));
+        if ($message === '') {
+            return;
+        }
+
+        /** @var User $user */
+        $user = $this->getUser();
+        $comment = new TicketComment();
+        $comment->setTicket($ticket);
+        $comment->setUser($user);
+        $comment->setMessage($message);
+
+        $file = $request->files->get('comment_file');
+        if ($file instanceof UploadedFile) {
+            $filename = uniqid('comment_', true) . '.' . $file->guessExtension();
+            $file->move($this->getParameter('kernel.project_dir') . '/public/uploads/comments', $filename);
+            $comment->setFilePath($filename);
+        }
+
+        $em->persist($comment);
+        $em->flush();
+
+        $notificationService->notify(
+            $ticket->getCreatedBy(),
+            Notification::TYPE_TICKET_STATUS_CHANGED,
+            sprintf('Un nouveau commentaire a été ajouté au ticket #%d.', $ticket->getId()),
+            $ticket
+        );
+    }
+
     protected function handleFileUpload(UploadedFile $file, string $directory): string
     {
         $filename = uniqid('upload_', true) . '.' . $file->guessExtension();

@@ -13,6 +13,9 @@ class ProcessedSiteRepository extends ServiceEntityRepository
         parent::__construct($registry, ProcessedSite::class);
     }
 
+    /**
+     * Vérifie si un hash de données existe déjà.
+     */
     public function existsByDataHash(string $hash): bool
     {
         return (int) $this->createQueryBuilder('ps')
@@ -23,48 +26,67 @@ class ProcessedSiteRepository extends ServiceEntityRepository
             ->getSingleScalarResult() > 0;
     }
 
+    /**
+     * Trouve un site par son nom exact (insensible à la casse).
+     */
+    public function findOneBySiteName(string $siteName): ?ProcessedSite
+    {
+        return $this->createQueryBuilder('ps')
+            ->andWhere('LOWER(ps.siteName) = :siteName')
+            ->setParameter('siteName', mb_strtolower(trim($siteName)))
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
+    /**
+     * Compte le nombre total de sites, éventuellement filtrés par service.
+     */
     public function countAllSites(?string $service = null): int
     {
-        $qb = $this->createQueryBuilder('ps')
-            ->select('COUNT(ps.id)');
-
+        $qb = $this->createQueryBuilder('s')
+            ->select('COUNT(s.id)');
         if ($service) {
-            $qb->andWhere('ps.service = :service')
+            $qb->andWhere('s.service = :service')
                ->setParameter('service', $this->normalizeService($service));
         }
-
         return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
+    /**
+     * Compte le nombre de sites critiques, éventuellement filtrés par service.
+     * Pour PostgreSQL, on compare avec true (booléen).
+     */
     public function countCriticalSites(?string $service = null): int
     {
-        $qb = $this->createQueryBuilder('ps')
-            ->select('COUNT(ps.id)')
-            ->andWhere('ps.isCritical = true');
-
+        $qb = $this->createQueryBuilder('s')
+            ->select('COUNT(s.id)')
+            ->andWhere('s.isCritical = true');  // ← correction : true
         if ($service) {
-            $qb->andWhere('ps.service = :service')
+            $qb->andWhere('s.service = :service')
                ->setParameter('service', $this->normalizeService($service));
         }
-
         return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
-    // ✅ CORRIGÉ : utiliser dateMax au lieu de createdAt
+    /**
+     * Récupère les derniers sites (triés par trafic max descendant).
+     */
     public function findLatestSites(?string $service = null, int $limit = 100): array
     {
         $qb = $this->createQueryBuilder('p')
-            ->orderBy('p.dateMax', 'DESC')
+            ->orderBy('p.maxTrafic', 'DESC')
             ->setMaxResults($limit);
-
         if ($service) {
             $qb->andWhere('p.service = :service')
                ->setParameter('service', $this->normalizeService($service));
         }
-
         return $qb->getQuery()->getResult();
     }
 
+    /**
+     * Récupère les sites critiques.
+     */
     public function findCriticalSites(?string $service = null, int $limit = 100): array
     {
         $qb = $this->createQueryBuilder('ps')
@@ -83,6 +105,9 @@ class ProcessedSiteRepository extends ServiceEntityRepository
         return $qb->getQuery()->getResult();
     }
 
+    /**
+     * Liste des noms de sites distincts.
+     */
     public function findDistinctSiteNames(?string $service = null): array
     {
         $qb = $this->createQueryBuilder('ps')
@@ -98,6 +123,9 @@ class ProcessedSiteRepository extends ServiceEntityRepository
         return array_map(fn ($row) => $row['siteName'], $rows);
     }
 
+    /**
+     * Statistiques par service (total et critiques).
+     */
     public function getStatsByService(): array
     {
         return $this->createQueryBuilder('ps')
@@ -111,77 +139,63 @@ class ProcessedSiteRepository extends ServiceEntityRepository
             ->getArrayResult();
     }
 
+    /**
+     * Distribution des sites par service (FO, FH, SHARED, etc.).
+     */
     public function getServiceDistribution(): array
     {
-        $rows = $this->createQueryBuilder('ps')
-            ->select('ps.service AS service')
-            ->addSelect('COUNT(ps.id) AS total')
-            ->andWhere('ps.service IS NOT NULL')
-            ->groupBy('ps.service')
-            ->orderBy('ps.service', 'ASC')
-            ->getQuery()
-            ->getArrayResult();
-
-        $result = [
-            'FO' => 0,
-            'FH' => 0,
-            'SHARED' => 0,
-            'BACKBONE' => 0,
-        ];
-
-        foreach ($rows as $row) {
-            $service = $this->normalizeService($row['service'] ?? null);
-            if (isset($result[$service])) {
-                $result[$service] += (int) $row['total'];
-            } else {
-                $result['SHARED'] += (int) $row['total'];
-            }
+        $qb = $this->createQueryBuilder('s')
+            ->select('s.service, COUNT(s.id) as count')
+            ->groupBy('s.service');
+        $results = $qb->getQuery()->getResult();
+        $dist = [];
+        foreach ($results as $row) {
+            $dist[$row['service']] = (int) $row['count'];
         }
-
-        return $result;
+        return $dist;
     }
 
+    /**
+     * Statistiques de classification (total et critiques) par classification.
+     */
     public function getClassificationStats(?string $service = null): array
     {
-        $qb = $this->createQueryBuilder('ps')
-            ->select('ps.classification AS classification')
-            ->addSelect('COUNT(ps.id) AS total')
-            ->addSelect('SUM(CASE WHEN ps.isCritical = true THEN 1 ELSE 0 END) AS critical')
-            ->groupBy('ps.classification')
-            ->orderBy('ps.classification', 'ASC');
-
+        $qb = $this->createQueryBuilder('s')
+            ->select('s.classification, COUNT(s.id) as total, SUM(CASE WHEN s.isCritical = true THEN 1 ELSE 0 END) as critical')
+            ->groupBy('s.classification');
         if ($service) {
-            $qb->andWhere('ps.service = :service')
+            $qb->andWhere('s.service = :service')
                ->setParameter('service', $this->normalizeService($service));
         }
-
-        $rows = $qb->getQuery()->getArrayResult();
-        $result = [];
-
-        foreach ($rows as $row) {
-            $classification = $row['classification'] ?: 'UNKNOWN';
-            $result[$classification] = [
+        $results = $qb->getQuery()->getResult();
+        $stats = [];
+        foreach ($results as $row) {
+            $stats[$row['classification']] = [
                 'total' => (int) $row['total'],
                 'critical' => (int) $row['critical'],
             ];
         }
-
-        return $result;
+        return $stats;
     }
 
+    /**
+     * Trafic moyen (maxTrafic) des sites.
+     */
     public function getAverageTraffic(?string $service = null): float
     {
-        $qb = $this->createQueryBuilder('ps')
-            ->select('AVG(ps.maxTrafic)');
-
+        $qb = $this->createQueryBuilder('s')
+            ->select('AVG(s.maxTrafic) as avgTraffic');
         if ($service) {
-            $qb->andWhere('ps.service = :service')
+            $qb->andWhere('s.service = :service')
                ->setParameter('service', $this->normalizeService($service));
         }
-
-        return (float) ($qb->getQuery()->getSingleScalarResult() ?? 0);
+        $result = $qb->getQuery()->getSingleScalarResult();
+        return $result ? (float) $result : 0.0;
     }
 
+    /**
+     * Récupère les sites paginés avec filtres.
+     */
     public function findSitesPaginated(
         ?string $service,
         ?string $classification,
@@ -235,6 +249,9 @@ class ProcessedSiteRepository extends ServiceEntityRepository
         ];
     }
 
+    /**
+     * Export avancé avec filtres.
+     */
     public function findForAdvancedExport(
         ?string $service,
         string $mode = 'all',
@@ -275,19 +292,79 @@ class ProcessedSiteRepository extends ServiceEntityRepository
         return $qb->getQuery()->getResult();
     }
 
+    /**
+     * Normalise le nom du service pour les requêtes.
+     */
     private function normalizeService(?string $service): string
     {
         $service = strtoupper(trim((string) $service));
-
-        if ($service === 'FO') {
-            return 'FO';
-        }
-        if ($service === 'FH') {
-            return 'FH';
-        }
-        if ($service === 'BACKBONE') {
-            return 'BACKBONE';
-        }
+        if ($service === 'FO') return 'FO';
+        if ($service === 'FH') return 'FH';
+        if ($service === 'BACKBONE') return 'BACKBONE';
         return 'SHARED';
+    }
+
+    /**
+     * Compte les sites sécurisés (non critiques et trafic < 80% de la capacité).
+     */
+    public function countSecureSites(?string $service = null): int
+    {
+        $qb = $this->createQueryBuilder('ps')
+            ->select('COUNT(ps.id)')
+            ->where('ps.isCritical = false')
+            ->andWhere('ps.maxTrafic < ps.capaciteMbps * 0.8');
+        if ($service) {
+            $qb->andWhere('ps.service = :service')
+               ->setParameter('service', $this->normalizeService($service));
+        }
+        return (int) $qb->getQuery()->getSingleScalarResult();
+    }
+
+    /**
+     * Compte les sites sous observation (non critiques et trafic >= 80% de la capacité).
+     */
+    public function countWarningSites(?string $service = null): int
+    {
+        $qb = $this->createQueryBuilder('ps')
+            ->select('COUNT(ps.id)')
+            ->where('ps.isCritical = false')
+            ->andWhere('ps.maxTrafic >= ps.capaciteMbps * 0.8');
+        if ($service) {
+            $qb->andWhere('ps.service = :service')
+               ->setParameter('service', $this->normalizeService($service));
+        }
+        return (int) $qb->getQuery()->getSingleScalarResult();
+    }
+
+    /**
+     * Récupère les sites avec coordonnées, avec filtres optionnels.
+     * Retourne un tableau associatif pour un accès facile dans Twig.
+     */
+    public function findSitesWithCoordinates(
+        ?string $service = null,
+        ?string $classification = null,
+        ?string $critical = null
+    ): array {
+        $qb = $this->createQueryBuilder('s')
+            ->select('s.siteName, s.latitude, s.longitude, s.isCritical, s.maxTrafic, s.service, s.classification, s.typeTrans')
+            ->where('s.latitude IS NOT NULL')
+            ->andWhere('s.longitude IS NOT NULL');
+
+        if ($service) {
+            $qb->andWhere('s.service = :service')
+               ->setParameter('service', $this->normalizeService($service));
+        }
+        if ($classification) {
+            $qb->andWhere('s.classification = :classification')
+               ->setParameter('classification', $classification);
+        }
+        if ($critical === '1') {
+            $qb->andWhere('s.isCritical = true');
+        } elseif ($critical === '0') {
+            $qb->andWhere('s.isCritical = false');
+        }
+
+        // Utilisation de getArrayResult() pour obtenir des tableaux associatifs
+        return $qb->getQuery()->getArrayResult();
     }
 }

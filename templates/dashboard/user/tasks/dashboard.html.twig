@@ -2,51 +2,72 @@
 
 {% block dashboard_content %}
 <div class="container mx-auto p-6">
-    <h1 class="text-2xl font-bold mb-4">Mes tâches à réaliser</h1>
+    <h1 class="text-2xl font-bold mb-4">Mes tâches</h1>
     <p class="mb-4 text-gray-600">Service : {{ user.service }}</p>
 
     {% if tasks is empty %}
         <div class="bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded">
-            ✅ Aucune tâche en attente pour le moment.
+            ✅ Aucune tâche pour le moment.
         </div>
     {% else %}
         <div class="overflow-x-auto">
-            <table class="min-w-full border-collapse">
-                <thead>
-                    <tr class="bg-gray-100 border-b border-gray-300">
-                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Tâche</th>
-                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Ticket</th>
-                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Sites ({{ user.service }})</th>
-                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
-                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Date création</th>
-                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Action</th>
+            <table class="min-w-full bg-white border">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th>Tâche</th>
+                        <th>Ticket</th>
+                        <th>Sites concernés</th>
+                        <th>Description</th>
+                        <th>Date création</th>
+                        <th>Statut</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for task in tasks %}
-                        {% set filteredSites = task.ticket.ticketSites|filter(ts => ts.typeTrans|upper == user.service|upper) %}
-                        {% if filteredSites is not empty %}
-                            <tr class="border-b border-gray-200 hover:bg-gray-50 {{ cycle(['bg-white', 'bg-gray-50'], loop.index0) }}">
-                                <td class="px-4 py-3 text-sm text-gray-800">{{ task.title }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-600">{{ task.ticket.title }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-600">
-                                    {% for ts in filteredSites %}
-                                        <span class="inline-block bg-gray-100 rounded px-2 py-0.5 text-xs mr-1 mb-1">
-                                            {{ ts.siteName }} ({{ ts.typeTrans }})
-                                        </span>
-                                    {% endfor %}
-                                </td>
-                                <td class="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{{ task.description|default('-') }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{{ task.createdAt ? task.createdAt|date('d/m/Y H:i') : '-' }}</td>
-                                <td class="px-4 py-3 text-sm">
-                                    <a href="{{ path('user_task_show', {id: task.id}) }}" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition">Démarrer</a>
-                                </td>
-                            </tr>
-                        {% endif %}
+                        <tr class="border-b hover:bg-gray-50">
+                            <td><strong>{{ task.title }}</strong></td>
+                            <td>{{ task.ticket.title }}</td>
+                            <td>
+                                {% for ts in task.ticket.ticketSites %}
+                                    {{ ts.siteName }} ({{ ts.typeTrans }}){% if not loop.last %}, {% endif %}
+                                {% endfor %}
+                            </td>
+                            <td>{{ task.description|default('-')|slice(0, 80) }}{% if task.description|length > 80 %}...{% endif %}</td>
+                            <td>{{ task.createdAt ? task.createdAt|date('d/m/Y H:i') : '-' }}</td>
+                            <td>
+                                {% if task.status == 'completed' %}
+                                    <span class="badge green">Terminée</span>
+                                {% elseif task.status == 'pending' %}
+                                    <span class="badge orange">En attente</span>
+                                {% elseif task.status == 'in_progress' %}
+                                    <span class="badge blue">En cours</span>
+                                {% else %}
+                                    <span class="badge gray">{{ task.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ path('user_task_show', {id: task.id}) }}" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">
+                                    {% if task.status == 'completed' %}
+                                        Voir détails
+                                    {% else %}
+                                        Démarrer
+                                    {% endif %}
+                                </a>
+                            </td>
+                        </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
     {% endif %}
 </div>
+
+<style>
+    .badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .badge.green { background: #dcfce7; color: #16a34a; }
+    .badge.orange { background: #fef3c7; color: #d97706; }
+    .badge.blue { background: #dbeafe; color: #2563eb; }
+    .badge.gray { background: #f1f5f9; color: #475569; }
+</style>
 {% endblock %}

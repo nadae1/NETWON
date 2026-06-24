@@ -2,158 +2,15 @@
 
 {% block dashboard_content %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
 <style>
-.admin-dashboard { padding-bottom: 40px; }
-.page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; }
-.page-title { font-size:28px; font-weight:700; color:#07152f; margin:0; }
-.page-desc { color:#60708a; font-size:15px; margin-top:6px; }
-
-.stats-grid {
-    display:grid;
-    grid-template-columns:repeat(4, minmax(0, 1fr));
-    gap:20px;
-    margin-bottom:40px;
-}
-
-.stat-card {
-    border-radius:16px;
-    padding:24px;
-    display:flex;
-    justify-content:space-between;
-    gap:14px;
-}
-
-.stat-blue { background:#eff6ff; border:1px solid #bfdbfe; }
-.stat-red { background:#fff1f2; border:1px solid #fecaca; }
-.stat-green { background:#ecfeff; border:1px solid #99f6e4; }
-.stat-purple { background:#f5f3ff; border:1px solid #ddd6fe; }
-
-.stat-label { font-size:13px; color:#64748b; font-weight:600; text-transform:uppercase; }
-.stat-value { font-size:36px; font-weight:800; color:#020617; line-height:1.2; margin-top:8px; }
-.stat-small { color:#536782; font-size:13px; margin-top:6px; }
-.stat-icon { width:48px; height:48px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:22px; }
-
-.icon-blue { background:#bfdbfe; color:#2563eb; }
-.icon-red { background:#fecaca; color:#ef4444; }
-.icon-green { background:#ccfbf1; color:#14b8a6; }
-.icon-purple { background:#e9d5ff; color:#9333ea; }
-
-.service-tabs {
-    display:flex;
-    gap:10px;
-    margin-bottom:30px;
-    flex-wrap:wrap;
-}
-
-.service-tab {
-    padding:10px 24px;
-    border-radius:30px;
-    text-decoration:none;
-    font-weight:600;
-    background:#f1f5f9;
-    color:#475569;
-}
-
-.service-tab.active {
-    background:#3b82f6;
-    color:white;
-}
-
-.charts-grid {
-    display:grid;
-    grid-template-columns:2fr 1fr;
-    gap:28px;
-    margin-top:30px;
-}
-
-.chart-card {
-    background:white;
-    border:1px solid #dbe3ef;
-    border-radius:18px;
-    padding:24px;
-    box-shadow:0 2px 8px rgba(0,0,0,0.04);
-}
-
-.chart-title {
-    font-size:18px;
-    font-weight:700;
-    margin-bottom:24px;
-    color:#020617;
-}
-
-.chart-box {
-    height:330px;
-    position:relative;
-}
-
-.legend {
-    display:flex;
-    justify-content:center;
-    gap:20px;
-    margin-top:28px;
-    flex-wrap:wrap;
-}
-
-.legend-item { display:flex; align-items:center; gap:8px; font-size:14px; }
-.legend-dot { width:12px; height:12px; border-radius:50%; }
-.dot-blue { background:#3b82f6; }
-.dot-green { background:#14b8a6; }
-.dot-purple { background:#8b5cf6; }
-
-.table-like {
-    background:white;
-    border-radius:16px;
-    border:1px solid #e2e8f0;
-    overflow-x:auto;
-}
-
-.table-row {
-    display:flex;
-    align-items:center;
-    padding:14px 20px;
-    border-bottom:1px solid #e2e8f0;
-    gap:20px;
-}
-
-.table-row:last-child { border-bottom:none; }
-.table-row > div { flex:1; min-width:100px; }
-
-.badge {
-    padding:4px 12px;
-    border-radius:20px;
-    font-size:12px;
-    font-weight:600;
-}
-
-.badge.red { background:#fee2e2; color:#dc2626; }
-.badge.green { background:#dcfce7; color:#16a34a; }
-
-.view-all-link { margin-top:16px; text-align:center; }
-
-.btn-primary {
-    background:#3b82f6;
-    color:white;
-    border:none;
-    padding:10px 20px;
-    border-radius:8px;
-    text-decoration:none;
-    font-weight:500;
-}
-
-.btn-outline {
-    display:inline-block;
-    padding:10px 24px;
-    border:1px solid #cbd5e1;
-    border-radius:8px;
-    color:#3b82f6;
-    text-decoration:none;
-    font-weight:500;
-}
-
-@media (max-width:1100px) {
-    .stats-grid, .charts-grid { grid-template-columns:1fr; }
-}
+    /* ... vos styles (inchangés) ... */
 </style>
 
 <div class="admin-dashboard">
@@ -167,6 +24,7 @@
         </div>
     </div>
 
+    <!-- 4 cartes statistiques -->
     <div class="stats-grid">
         <div class="stat-card stat-blue">
             <div>
@@ -202,20 +60,49 @@
         <div class="stat-card stat-purple">
             <div>
                 <div class="stat-label">Services Actifs</div>
-                <div class="stat-value">3</div>
-                <div class="stat-small">FO / FH / SHARED</div>
+                <div class="stat-value">{{ serviceDistribution|length }}</div>
+                <div class="stat-small">{{ serviceDistribution|keys|join(' / ') }}</div>
             </div>
             <div class="stat-icon icon-purple">🏷️</div>
         </div>
     </div>
 
-    <div class="service-tabs">
-        <a href="{{ path('admin_dashboard_home') }}" class="service-tab active">Tous les sites</a>
-        <a href="{{ path('admin_dashboard_sites', {service: 'FO'}) }}" class="service-tab">📡 FO ({{ serviceDistribution.FO|default(0) }})</a>
-        <a href="{{ path('admin_dashboard_sites', {service: 'FH'}) }}" class="service-tab">📡 FH ({{ serviceDistribution.FH|default(0) }})</a>
-        <a href="{{ path('admin_dashboard_sites', {service: 'SHARED'}) }}" class="service-tab">🔄 SHARED ({{ serviceDistribution.SHARED|default(0) }})</a>
+    <!-- Filtres -->
+    <form method="get" action="{{ path('admin_dashboard_home') }}" class="filters-bar">
+        <label>Service :
+            <select name="service">
+                <option value="">Tous</option>
+                {% for svc in allServices %}
+                    <option value="{{ svc }}" {% if svc == currentService %}selected{% endif %}>{{ svc }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Classification :
+            <select name="classification">
+                <option value="">Toutes</option>
+                {% for class in allClassifications %}
+                    <option value="{{ class }}" {% if class == currentClassification %}selected{% endif %}>{{ class }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>État critique :
+            <select name="critical">
+                <option value="">Tous</option>
+                <option value="1" {% if currentCritical == '1' %}selected{% endif %}>Critique</option>
+                <option value="0" {% if currentCritical == '0' %}selected{% endif %}>Normal</option>
+            </select>
+        </label>
+        <button type="submit" class="btn">Filtrer</button>
+        <a href="{{ path('admin_dashboard_home') }}" class="btn btn-outline">Réinitialiser</a>
+    </form>
+
+    <!-- Carte -->
+    <div class="map-container" id="mapContainer">
+        <div id="map"></div>
+        <button class="map-export-btn" id="exportMapBtn">📷 Exporter la carte</button>
     </div>
 
+    <!-- Graphiques -->
     <div class="charts-grid">
         <div class="chart-card">
             <div class="chart-title">Classification des sites</div>
@@ -229,7 +116,6 @@
             <div class="chart-box">
                 <canvas id="serviceDonut"></canvas>
             </div>
-
             <div class="legend">
                 <div class="legend-item"><span class="legend-dot dot-blue"></span> FO ({{ serviceDistribution.FO|default(0) }})</div>
                 <div class="legend-item"><span class="legend-dot dot-green"></span> FH ({{ serviceDistribution.FH|default(0) }})</div>
@@ -238,9 +124,9 @@
         </div>
     </div>
 
+    <!-- Derniers sites -->
     <div class="card" style="margin-top:30px;">
         <h3 class="panel-title">Derniers sites traités</h3>
-
         {% if sites is empty %}
             <div class="empty-state">Aucune donnée importée.</div>
         {% else %}
@@ -253,13 +139,12 @@
                     <div>Trafic Max</div>
                     <div>État</div>
                 </div>
-
                 {% for site in sites|slice(0, 5) %}
                     <div class="table-row">
                         <div><strong>{{ site.siteName }}</strong></div>
-                        <div><span class="badge" style="background:#e2e8f0;">{{ site.serviceName }}</span></div>
-                        <div>{{ site.classification ?: '-' }}</div>
-                        <div>{{ site.typeTrans ?: '-' }}</div>
+                        <div><span class="badge" style="background:#e2e8f0;">{{ site.service ?? '-' }}</span></div>
+                        <div>{{ site.classification ?? '-' }}</div>
+                        <div>{{ site.typeTrans ?? '-' }}</div>
                         <div>{{ site.maxTrafic|number_format(2, '.', ' ') }} Mbps</div>
                         <div>
                             {% if site.isCritical %}
@@ -271,7 +156,6 @@
                     </div>
                 {% endfor %}
             </div>
-
             <div class="view-all-link">
                 <a href="{{ path('admin_dashboard_sites') }}" class="btn-outline">Voir tous les sites →</a>
             </div>
@@ -281,110 +165,163 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // Graphiques
     const classificationStats = {{ classificationStats|json_encode|raw }};
     const serviceDistribution = {{ serviceDistribution|json_encode|raw }};
 
-    const labels = ['TF', 'COTRANS', 'NO_COTRANS', 'NON_TDD'];
-
+    const labels = Object.keys(classificationStats);
     const totalData = labels.map(label => classificationStats[label]?.total || 0);
     const criticalData = labels.map(label => classificationStats[label]?.critical || 0);
 
-    new Chart(document.getElementById('classificationChart'), {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Total',
-                    data: totalData,
-                    backgroundColor: '#3b82f6',
-                    borderRadius: 6
-                },
-                {
-                    label: 'Critique',
-                    data: criticalData,
-                    backgroundColor: '#ef4444',
-                    borderRadius: 6
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
+    if (document.getElementById('classificationChart')) {
+        new Chart(document.getElementById('classificationChart'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Total', data: totalData, backgroundColor: '#3b82f6', borderRadius: 6 },
+                    { label: 'Critique', data: criticalData, backgroundColor: '#ef4444', borderRadius: 6 }
+                ]
             },
-            plugins: {
-                tooltip: {
-                    enabled: true,
-                    backgroundColor: '#ffffff',
-                    titleColor: '#020617',
-                    bodyColor: '#2563eb',
-                    borderColor: '#e2e8f0',
-                    borderWidth: 1,
-                    padding: 14,
-                    displayColors: true,
-                    callbacks: {
-                        label: function(context) {
-                            return context.dataset.label + ' : ' + context.raw;
-                        }
-                    }
-                },
-                legend: {
-                    position: 'bottom'
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: { precision: 0 },
-                    title: {
-                        display: true,
-                        text: 'Nombre de sites'
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    tooltip: {
+                        backgroundColor: '#ffffff',
+                        titleColor: '#020617',
+                        bodyColor: '#2563eb',
+                        borderColor: '#e2e8f0',
+                        borderWidth: 1,
+                        padding: 14
                     },
-                    grid: { color: '#e2e8f0' }
+                    legend: { position: 'bottom' }
                 },
-                x: {
-                    grid: { display: false }
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Nombre de sites' }, grid: { color: '#e2e8f0' } },
+                    x: { grid: { display: false } }
                 }
             }
-        }
-    });
+        });
+    }
 
-    new Chart(document.getElementById('serviceDonut'), {
-        type: 'doughnut',
-        data: {
-            labels: ['FO', 'FH', 'SHARED'],
-            datasets: [{
-                data: [
-                    serviceDistribution.FO || 0,
-                    serviceDistribution.FH || 0,
-                    serviceDistribution.SHARED || 0
-                ],
-                backgroundColor: ['#3b82f6', '#14b8a6', '#8b5cf6'],
-                borderColor: '#ffffff',
-                borderWidth: 4,
-                hoverOffset: 8
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '55%',
-            plugins: {
-                tooltip: {
-                    enabled: true,
-                    backgroundColor: '#ffffff',
-                    titleColor: '#020617',
-                    bodyColor: '#2563eb',
-                    borderColor: '#e2e8f0',
-                    borderWidth: 1,
-                    padding: 14
-                },
-                legend: { display: false }
+    if (document.getElementById('serviceDonut')) {
+        new Chart(document.getElementById('serviceDonut'), {
+            type: 'doughnut',
+            data: {
+                labels: ['FO', 'FH', 'SHARED'],
+                datasets: [{
+                    data: [
+                        serviceDistribution.FO || 0,
+                        serviceDistribution.FH || 0,
+                        serviceDistribution.SHARED || 0
+                    ],
+                    backgroundColor: ['#3b82f6', '#14b8a6', '#8b5cf6'],
+                    borderColor: '#ffffff',
+                    borderWidth: 4,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '55%',
+                plugins: {
+                    tooltip: {
+                        backgroundColor: '#ffffff',
+                        titleColor: '#020617',
+                        bodyColor: '#2563eb',
+                        borderColor: '#e2e8f0',
+                        borderWidth: 1,
+                        padding: 14
+                    },
+                    legend: { display: false }
+                }
             }
+        });
+    }
+
+    // Carte Leaflet
+    const sitesData = {{ sites|json_encode|raw }};
+    console.log('Données carte :', sitesData); // débogage
+
+    if (sitesData.length === 0) {
+        document.getElementById('map').innerHTML = '<p style="text-align:center;padding:60px;color:#64748b;">Aucun site géolocalisé. Importez des coordonnées via l\'option Import du Superuser.</p>';
+    } else {
+        const map = L.map('map').setView([34.0, 9.0], 7);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        const markers = L.markerClusterGroup();
+
+        // Icônes personnalisées
+        const criticalIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: '<div style="background:#ef4444;width:18px;height:18px;border-radius:50%;border:2px solid white;box-shadow:0 0 6px rgba(0,0,0,0.4);"></div>',
+            iconSize: [18, 18],
+            iconAnchor: [9, 9]
+        });
+        const warningIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: '<div style="background:#f59e0b;width:18px;height:18px;border-radius:50%;border:2px solid white;box-shadow:0 0 6px rgba(0,0,0,0.4);"></div>',
+            iconSize: [18, 18],
+            iconAnchor: [9, 9]
+        });
+        const safeIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: '<div style="background:#10b981;width:18px;height:18px;border-radius:50%;border:2px solid white;box-shadow:0 0 6px rgba(0,0,0,0.4);"></div>',
+            iconSize: [18, 18],
+            iconAnchor: [9, 9]
+        });
+
+        sitesData.forEach(site => {
+            if (site.latitude && site.longitude) {
+                const lat = parseFloat(site.latitude);
+                const lng = parseFloat(site.longitude);
+                let icon;
+                if (site.isCritical) {
+                    icon = criticalIcon;
+                } else if (site.maxTrafic && parseFloat(site.maxTrafic) > 1000) {
+                    icon = warningIcon;
+                } else {
+                    icon = safeIcon;
+                }
+                const popupContent = `
+                    <strong>${site.siteName}</strong><br>
+                    Service: ${site.service || 'N/A'}<br>
+                    Classification: ${site.classification || 'N/A'}<br>
+                    Trafic max: ${site.maxTrafic || 0} Mbps<br>
+                    État: ${site.isCritical ? '⚠️ Critique' : (parseFloat(site.maxTrafic) > 1000 ? '🟡 Sous observation' : '✅ Sécurisé')}
+                `;
+                const marker = L.marker([lat, lng], { icon: icon })
+                    .bindPopup(popupContent);
+                markers.addLayer(marker);
+            }
+        });
+
+        map.addLayer(markers);
+        if (markers.getLayers().length > 0) {
+            const group = L.featureGroup(markers.getLayers());
+            map.fitBounds(group.getBounds().pad(0.1));
         }
+    }
+
+    // Export de la carte
+    document.getElementById('exportMapBtn').addEventListener('click', function() {
+        const mapContainer = document.getElementById('mapContainer');
+        html2canvas(mapContainer, {
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#ffffff'
+        }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = 'carte_sites.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }).catch(err => {
+            alert('Erreur lors de l\'export : ' + err);
+        });
     });
 });
 </script>

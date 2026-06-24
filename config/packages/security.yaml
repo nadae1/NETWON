@@ -42,8 +42,8 @@ security:
         - { path: ^/reset-password, roles: PUBLIC_ACCESS }
         - { path: ^/assets, roles: PUBLIC_ACCESS }
 
-        - { path: ^/dashboard/superuser, roles: ROLE_SUPERUSER }
-        - { path: ^/dashboard/admin, roles: ROLE_ADMIN }
-
+        - { path: ^/admin, roles: ROLE_ADMIN }
+        - { path: ^/superuser, roles: ROLE_SUPERUSER }
         - { path: ^/dashboard, roles: ROLE_USER }
+        - { path: ^/user, roles: ROLE_USER }
         - { path: ^/, roles: PUBLIC_ACCESS }

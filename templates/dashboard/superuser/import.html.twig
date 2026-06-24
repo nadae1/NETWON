@@ -1,53 +1,110 @@
 {% extends 'dashboard/base_dashboard.html.twig' %}
 
 {% block dashboard_content %}
-<div class="workflow-page">
+<div class="import-page">
     <div class="page-header">
-        <div>
-            <h2 class="page-title">Import des fichiers</h2>
-            <div class="page-desc">Import global des fichiers Traffic / Ports / Liaison.</div>
+        <h2 class="page-title">Import des fichiers</h2>
+        <div class="page-desc">Import global des fichiers Traffic / Ports / Liaison</div>
+    </div>
+
+    <!-- Section Import global -->
+    <div class="card mb-10">
+        <div class="card-header">
+            <h3 class="card-title">📊 Import global des sites</h3>
+            <p class="card-desc">Fichiers contenant les données de trafic, ports et types de liaison (tous services confondus).</p>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{{ path('superuser_dashboard_import') }}" enctype="multipart/form-data" class="import-form">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Fichier Traffic <span class="required">*</span></label>
+                        <input type="file" name="trafic_file" accept=".xlsx,.xls,.csv" required>
+                        <small>Données de trafic (obligatoire)</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Fichier Ports</label>
+                        <input type="file" name="port_file" accept=".xlsx,.xls,.csv">
+                        <small>Capacités par port (optionnel)</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Fichier Liaison</label>
+                        <input type="file" name="type_liaison_file" accept=".xlsx,.xls,.csv">
+                        <small>Type de transmission (optionnel)</small>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary btn-lg">🚀 Lancer le traitement global</button>
+                </div>
+            </form>
         </div>
     </div>
 
-    {% for message in app.flashes('success') %}
-        <div class="flash-success">{{ message }}</div>
-    {% endfor %}
-    {% for message in app.flashes('error') %}
-        <div class="flash-error">{{ message }}</div>
-    {% endfor %}
-
+    <!-- Section Import des capacités -->
     <div class="card">
-        <form method="post" enctype="multipart/form-data" action="{{ path('superuser_data_import_process') }}">
-            <div class="form-grid">
-                <div>
-                    <label>Service concerné</label>
-                    <select name="service_scope" required>
-                        <option value="FO">FO</option>
-                        <option value="FH">FH</option>
-                        <option value="SHARED">SHARED</option>
-                    </select>
+        <div class="card-header">
+            <h3 class="card-title">⚙️ Importer les capacités des sites</h3>
+            <p class="card-desc">Mettre à jour les capacités des sites (FO / FH / Backbone) – ces fichiers sont indépendants.</p>
+        </div>
+        <div class="card-body">
+            <div class="capacities-grid">
+                <div class="capacity-card">
+                    <h4>📡 Capacités FO</h4>
+                    <form method="post" action="{{ path('superuser_import_capacite', {type: 'fo'}) }}" enctype="multipart/form-data">
+                        <input type="file" name="capacite_file" accept=".xlsx,.xls,.csv" required>
+                        <button type="submit" class="btn-secondary">Importer FO</button>
+                    </form>
                 </div>
-
-                <div>
-                    <label>Fichier Traffic</label>
-                    <input type="file" name="trafic" accept=".xls,.xlsx" required>
+                <div class="capacity-card">
+                    <h4>📡 Capacités FH</h4>
+                    <form method="post" action="{{ path('superuser_import_capacite', {type: 'fh'}) }}" enctype="multipart/form-data">
+                        <input type="file" name="capacite_file" accept=".xlsx,.xls,.csv" required>
+                        <button type="submit" class="btn-secondary">Importer FH</button>
+                    </form>
                 </div>
-
-                <div>
-                    <label>Fichier Ports</label>
-                    <input type="file" name="port" accept=".xls,.xlsx" required>
-                </div>
-
-                <div class="full-width">
-                    <label>Fichier Liaison</label>
-                    <input type="file" name="liaison" accept=".xls,.xlsx" required>
+                <div class="capacity-card">
+                    <h4>🌐 Capacités Backbone</h4>
+                    <form method="post" action="{{ path('superuser_import_capacite', {type: 'backbone'}) }}" enctype="multipart/form-data">
+                        <input type="file" name="capacite_file" accept=".xlsx,.xls,.csv" required>
+                        <button type="submit" class="btn-secondary">Importer Backbone</button>
+                    </form>
                 </div>
             </div>
-
-            <div class="form-actions">
-                <button class="btn btn-primary">Lancer traitement</button>
-            </div>
-        </form>
+        </div>
     </div>
 </div>
+
+<style>
+.import-page { padding-bottom: 40px; }
+.page-header { margin-bottom: 30px; }
+.page-title { font-size: 28px; font-weight: 700; color: #07152f; margin: 0; }
+.page-desc { color: #60708a; margin-top: 6px; }
+
+.card { background: white; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 30px; overflow: hidden; }
+.card-header { padding: 24px 28px 0 28px; }
+.card-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; color: #0f172a; }
+.card-desc { color: #64748b; font-size: 14px; }
+.card-body { padding: 24px 28px 28px 28px; }
+
+.form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 30px; }
+.form-group label { display: block; font-weight: 600; margin-bottom: 8px; color: #1e293b; }
+.form-group .required { color: #ef4444; }
+.form-group input[type="file"] { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 12px; background: #f8fafc; font-size: 14px; }
+.form-group small { display: block; color: #64748b; font-size: 12px; margin-top: 6px; }
+.form-actions { text-align: center; margin-top: 10px; }
+
+.capacities-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.capacity-card { background: #f8fafc; border-radius: 16px; padding: 20px; text-align: center; transition: all 0.2s; }
+.capacity-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.capacity-card h4 { font-size: 18px; font-weight: 700; margin-bottom: 16px; color: #1e293b; }
+.capacity-card input[type="file"] { width: 100%; margin-bottom: 16px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 10px; background: white; }
+.btn-primary { background: #3b82f6; color: white; border: none; padding: 12px 28px; border-radius: 40px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+.btn-primary:hover { background: #2563eb; }
+.btn-secondary { background: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1; padding: 10px 20px; border-radius: 40px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+.btn-secondary:hover { background: #e2e8f0; }
+.btn-lg { padding: 12px 32px; font-size: 16px; }
+
+@media (max-width: 900px) {
+    .form-grid, .capacities-grid { grid-template-columns: 1fr; }
+}
+</style>
 {% endblock %}

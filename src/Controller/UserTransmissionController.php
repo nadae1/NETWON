@@ -5,12 +5,14 @@ namespace App\Controller;
 use App\Entity\Notification;
 use App\Entity\SubWorkflow;
 use App\Entity\Ticket;
+use App\Entity\TicketTask;
 use App\Form\SubWorkflowRequestType;
 use App\Repository\ServiceRepository;
 use App\Repository\TicketRepository;
 use App\Repository\TicketTaskRepository;
 use App\Repository\UserRepository;
 use App\Service\NotificationService;
+use App\Service\TicketWorkflowService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -45,14 +47,79 @@ class UserTransmissionController extends AbstractController
     ): Response {
         $this->denyAccessUnlessGranted('ROLE_USER');
 
+        $tasks = $ticket->getTasks()->toArray();
+        usort($tasks, fn($a, $b) => $a->getStepOrder() <=> $b->getStepOrder());
+
         $subworkflowForm = $this->createForm(SubWorkflowRequestType::class, null, [
             'service_choices' => $this->getServiceChoices($serviceRepository),
         ]);
 
         return $this->render('dashboard/user/transmission/show.html.twig', [
             'ticket' => $ticket,
+            'tasks' => $tasks,
             'subworkflowForm' => $subworkflowForm->createView(),
         ]);
+    }
+
+    #[Route('/ticket/{id}/task/{taskId}/update', name: 'user_transmission_task_update', methods: ['POST'])]
+    public function updateTask(
+        Ticket $ticket,
+        int $taskId,
+        Request $request,
+        TicketTaskRepository $taskRepository,
+        EntityManagerInterface $em,
+        NotificationService $notificationService,
+        TicketWorkflowService $ticketWorkflowService
+    ): Response {
+        $this->denyAccessUnlessGranted('ROLE_USER');
+
+        $task = $taskRepository->find($taskId);
+        if (!$task || $task->getTicket()->getId() !== $ticket->getId()) {
+            throw $this->createNotFoundException('Tâche introuvable.');
+        }
+
+        $completed = $request->request->getBoolean('completed');
+        $comment = trim((string) $request->request->get('comment', ''));
+        $task->setStatus($completed ? TicketTask::STATUS_DONE : TicketTask::STATUS_IN_PROGRESS);
+        $task->setComment($comment ?: $task->getComment());
+        $task->setUpdatedAt(new \DateTime());
+        if ($completed) {
+            $task->setCompletedAt(new \DateTime());
+        }
+
+        $allCompleted = true;
+        foreach ($ticket->getTasks() as $t) {
+            if ($t->getStatus() !== TicketTask::STATUS_DONE) {
+                $allCompleted = false;
+                break;
+            }
+        }
+        if ($allCompleted) {
+            $ticket->setStatus('completed');
+        } else {
+            $ticket->setStatus('in_progress');
+        }
+
+        $em->flush();
+        $ticketWorkflowService->refreshTicketProgress($ticket);
+        $notificationService->notify(
+            $ticket->getCreatedBy(),
+            Notification::TYPE_TICKET_STATUS_CHANGED,
+            sprintf('Une tâche Transmission a été mise à jour pour le ticket #%d.', $ticket->getId()),
+            $ticket
+        );
+
+        return $this->redirectToRoute('user_transmission_ticket_show', ['id' => $ticket->getId()]);
+    }
+
+    #[Route('/ticket/{id}/comment', name: 'user_transmission_ticket_comment', methods: ['POST'])]
+    public function addComment(Ticket $ticket, Request $request, EntityManagerInterface $em, NotificationService $notificationService): Response
+    {
+        $this->denyAccessUnlessGranted('ROLE_USER');
+        $this->saveCommentFromRequest($ticket, $request, $em, $notificationService);
+        $this->addFlash('success', 'Commentaire ajouté.');
+
+        return $this->redirectToRoute('user_transmission_ticket_show', ['id' => $ticket->getId()]);
     }
 
     #[Route('/ticket/{id}/subworkflow', name: 'user_transmission_subworkflow', methods: ['POST'])]

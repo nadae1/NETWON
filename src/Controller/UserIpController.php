@@ -6,6 +6,7 @@ use App\Entity\TicketTask;
 use App\Entity\SubWorkflow;
 use App\Entity\SiteUpdateRequest;
 use App\Entity\User;
+use App\Repository\ServiceRepository;
 use App\Repository\TicketRepository;
 use App\Repository\TicketTaskRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -18,6 +19,7 @@ use App\Service\NotificationService;
 #[Route('/user/ip')]
 class UserIpController extends AbstractController
 {
+    use WorkflowControllerTrait;
     #[Route('/tickets', name: 'user_ip_tickets')]
     public function index(TicketRepository $ticketRepo): Response
     {
@@ -37,7 +39,7 @@ class UserIpController extends AbstractController
     }
 
     #[Route('/ticket/{id}', name: 'user_ip_ticket_show')]
-    public function show(Ticket $ticket, Request $request, EntityManagerInterface $em): Response
+    public function show(Ticket $ticket, Request $request, EntityManagerInterface $em, ServiceRepository $serviceRepository): Response
     {
         $this->denyAccessUnlessGranted('ROLE_USER');
         $user = $this->getUser();
@@ -46,9 +48,11 @@ class UserIpController extends AbstractController
         }
         $tasks = $ticket->getTasks()->toArray();
         usort($tasks, fn($a, $b) => $a->getStepOrder() <=> $b->getStepOrder());
+        $services = $serviceRepository->findAllOrdered();
         return $this->render('dashboard/user/ip/show.html.twig', [
             'ticket' => $ticket,
             'tasks' => $tasks,
+            'services' => $services,
         ]);
     }
 
@@ -62,12 +66,34 @@ class UserIpController extends AbstractController
         }
         $completed = $request->request->getBoolean('completed');
         $comment = $request->request->get('comment');
+        $workflowAction = $request->request->get('workflow_action');
         $capture = $request->files->get('capture');
         if ($task->isRequiresCapture() && $capture && $capture->isValid()) {
             $newFilename = uniqid() . '.' . $capture->guessExtension();
             $capture->move($this->getParameter('kernel.project_dir') . '/public/uploads/captures', $newFilename);
             $task->setCapturePath('/uploads/captures/' . $newFilename);
         }
+
+        if ($workflowAction === 'verify_capacity') {
+            $measuredCapacity = $request->request->get('measured_capacity');
+            if (is_numeric($measuredCapacity)) {
+                $task->setMeasuredCapacity((float) $measuredCapacity);
+            }
+            $task->setIpDecision($request->request->get('capacity_result', ''));
+        }
+
+        if ($workflowAction === 'assign_deploiement') {
+            $ticket->setStatus('waiting_deploiement');
+            $deploymentUsers = $em->getRepository(User::class)->findBy(['service' => 'DEPLOIEMENT']);
+            foreach ($deploymentUsers as $deploymentUser) {
+                $notif->notify($deploymentUser, Notification::TYPE_WORKFLOW_ASSIGNED, sprintf('Ticket #%d prêt pour déploiement.', $ticket->getId()), $ticket);
+            }
+        }
+
+        if ($workflowAction === 'final_validation') {
+            $ticket->setStatus('completed');
+        }
+
         $task->setStatus($completed ? 'completed' : 'pending');
         $task->setComment($comment);
         $task->setUpdatedAt(new \DateTime());
@@ -80,7 +106,7 @@ class UserIpController extends AbstractController
         }
         if ($allCompleted) {
             $ticket->setStatus('completed');
-        } else {
+        } elseif ($ticket->getStatus() !== 'waiting_deploiement') {
             $ticket->setStatus('in_progress');
         }
         $em->flush();
@@ -141,6 +167,15 @@ class UserIpController extends AbstractController
         $em->persist($updateRequest);
         $em->flush();
         $this->addFlash('success', 'Demande de mise à jour envoyée au SuperUser.');
+        return $this->redirectToRoute('user_ip_ticket_show', ['id' => $ticket->getId()]);
+    }
+
+    #[Route('/ticket/{id}/comment', name: 'user_ip_ticket_comment', methods: ['POST'])]
+    public function addComment(Ticket $ticket, Request $request, EntityManagerInterface $em, NotificationService $notificationService): Response
+    {
+        $this->denyAccessUnlessGranted('ROLE_USER');
+        $this->saveCommentFromRequest($ticket, $request, $em, $notificationService);
+        $this->addFlash('success', 'Commentaire ajouté.');
         return $this->redirectToRoute('user_ip_ticket_show', ['id' => $ticket->getId()]);
     }
 

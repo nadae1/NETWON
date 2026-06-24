@@ -2,22 +2,22 @@
 
 {% block title %}Ticket Transmission FH #{{ ticket.id }}{% endblock %}
 
-{% block content %}
+{% block dashboard_content %}
 <div class="container mx-auto p-4">
     <div class="mb-6">
         <a href="{{ path('user_transmission_tickets') }}" class="text-blue-600 hover:underline">← Retour aux tickets</a>
     </div>
 
-    <div class="grid grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <!-- Main Ticket Info -->
-        <div class="col-span-2">
+        <div class="lg:col-span-2">
             <div class="bg-white rounded-lg shadow-md p-6 mb-4">
                 <h1 class="text-2xl font-bold mb-2">{{ ticket.title }}</h1>
                 <p class="text-gray-700 mb-4">{{ ticket.description }}</p>
 
-                <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div>
-                        <strong>Statut:</strong> 
+                        <strong>Statut:</strong>
                         <span class="bg-indigo-100 text-indigo-800 px-3 py-1 rounded text-sm">
                             {{ ticket.status|replace({'_': ' '})|upper }}
                         </span>
@@ -29,25 +29,55 @@
                         <strong>Créé le:</strong> {{ ticket.createdAt|date('d/m/Y H:i') }}
                     </div>
                     <div>
-                        <strong>Par:</strong> {{ ticket.createdBy.username }}
+                        <strong>Service utilisateur:</strong> {{ app.user.service|upper }}
                     </div>
+                </div>
+
+                {% set visibleSites = ticket.ticketSites|filter(ts => ts.typeTrans|upper == app.user.service|upper) %}
+                <div class="bg-gray-50 p-4 rounded mb-4">
+                    <h2 class="font-semibold mb-3">Sites à traiter</h2>
+                    {% if visibleSites is empty %}
+                        <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-yellow-800">
+                            Aucun site correspondant au type de transport {{ app.user.service|upper }}.
+                        </div>
+                    {% else %}
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-100 text-left text-xs uppercase tracking-wider text-gray-500">
+                                    <tr>
+                                        <th class="px-4 py-3">Site</th>
+                                        <th class="px-4 py-3">Type de transport</th>
+                                        <th class="px-4 py-3">Service</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    {% for site in visibleSites %}
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-4 py-3 text-sm text-gray-700">{{ site.siteName }}</td>
+                                            <td class="px-4 py-3 text-sm text-gray-700">{{ site.typeTrans|default('N/A') }}</td>
+                                            <td class="px-4 py-3 text-sm text-gray-700">{{ site.serviceName|default('N/A') }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endif %}
                 </div>
 
                 <div class="bg-gray-50 p-4 rounded mb-4">
                     <strong>Progrès:</strong>
-                    <div class="w-full bg-gray-300 rounded-full h-2 mt-2">
+                    <div class="mt-3 w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                         <div class="bg-green-500 h-2 rounded-full" style="width: {{ ticket.progress }}%"></div>
                     </div>
-                    <p class="text-sm text-gray-600 mt-1">{{ ticket.progress }}%</p>
+                    <p class="text-sm text-gray-600 mt-2">{{ ticket.progress }}%</p>
                 </div>
             </div>
 
-            <!-- Tasks -->
-            {% if ticket.ticketTasks %}
+            {% if ticket.tasks %}
                 <div class="bg-white rounded-lg shadow-md p-6 mb-4">
                     <h2 class="text-xl font-bold mb-4">Tâches FH (Etude, MLO, WO)</h2>
                     <div class="space-y-3">
-                        {% for task in ticket.ticketTasks %}
+                        {% for task in ticket.tasks %}
                             <div class="border-l-4 border-indigo-500 pl-4 py-2">
                                 <div class="flex justify-between items-center">
                                     <span class="font-semibold">{{ task.stepCode }}</span>
@@ -69,7 +99,6 @@
                 </div>
             {% endif %}
 
-            <!-- Subworkflow Section -->
             <div class="bg-white rounded-lg shadow-md p-6 mb-4">
                 <h2 class="text-lg font-bold mb-4">Demander un Sous-Workflow</h2>
                 <form method="POST" action="{{ path('user_transmission_subworkflow', {id: ticket.id}) }}">

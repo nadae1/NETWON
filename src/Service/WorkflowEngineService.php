@@ -122,6 +122,21 @@ class WorkflowEngineService
         $this->em->flush();
     }
 
+
+    public function createInitialFhTask(Ticket $ticket, User $assignedTo): void
+{
+    $task = new TicketTask();
+    $task->setTicket($ticket);
+    $task->setTitle('Étude des prérequis FH');
+    $task->setDescription('Compléter l\'étude des prérequis transmission');
+    $task->setAssignedTo($assignedTo);
+    $task->setStatus('pending');
+    $task->setStepOrder(1);
+    $task->setStepCode(TicketTask::STEP_FH_ETUDE_PREREQUIS);
+    $task->setServiceName($assignedTo->getService());
+    $this->em->persist($task);
+}
+
     /**
      * Détermine l'étape suivante et l'utilisateur cible
      */
@@ -242,26 +257,35 @@ class WorkflowEngineService
         return $choices;
     }
 
-    public function createInitialIpTask(Ticket $ticket, User $assignedUser): TicketTask
-    {
-        $task = new TicketTask();
-        $task->setTicket($ticket);
-        $task->setAssignedTo($assignedUser);
+   public function createInitialIpTask(Ticket $ticket, User $assignedUser): TicketTask
+{
+    $site = $ticket->getTicketSites()->first();
+    $typeTrans = $site ? strtoupper($site->getTypeTrans() ?? '') : '';
+    
+    $task = new TicketTask();
+    $task->setTicket($ticket);
+    $task->setAssignedTo($assignedUser);
+    $task->setServiceName($assignedUser->getService());
+    $task->setDepartmentName($assignedUser->getDepartment());
+    $task->setStatus(TicketTask::STATUS_PENDING);
+    $task->setCreatedAt(new \DateTime());
+    $task->setUpdatedAt(new \DateTime());
+
+    if (str_contains($typeTrans, 'FH')) {
+        $task->setTitle('Étude des prérequis FH');
+        $task->setDescription('Compléter l\'étude des prérequis transmission FH');
+        $task->setStepCode(TicketTask::STEP_FH_ETUDE_PREREQUIS);
+    } else {
         $task->setTitle('Étude initiale IP');
         $task->setDescription('Analyser la demande et décider OK / NOK.');
-        $task->setServiceName($assignedUser->getService());
-        $task->setDepartmentName($assignedUser->getDepartment());
-        $task->setStatus(TicketTask::STATUS_PENDING);
         $task->setStepCode('engineering_ip');
-        $task->setCreatedAt(new \DateTime());
-        $task->setUpdatedAt(new \DateTime());
-
-        $this->em->persist($task);
-        $this->em->flush();
-
-        return $task;
     }
 
+    $this->em->persist($task);
+    $this->em->flush();
+
+    return $task;
+}
     public function completeTaskAndMoveNext(TicketTask $task, User $user, string $decision = 'ok'): void
     {
         $ticket = $task->getTicket();

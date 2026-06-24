@@ -2,6 +2,8 @@
 
 {% block dashboard_content %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
 .superuser-dashboard { padding-bottom: 40px; }
@@ -111,6 +113,61 @@
     font-weight: 500;
 }
 
+/* Nouveau style pour la carte */
+.map-section {
+    margin-top: 40px;
+}
+.map-card {
+    background: white;
+    border: 1px solid #dbe3ef;
+    border-radius: 18px;
+    padding: 20px;
+}
+.map-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+}
+.map-filters {
+    display: flex;
+    gap: 8px;
+}
+.map-filter-btn {
+    background: #f1f5f9;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: 500;
+}
+.map-filter-btn.active {
+    background: #3b82f6;
+    color: white;
+}
+#import-gps-form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+#import-gps-form input[type="file"] {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 6px 12px;
+}
+.import-message {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #64748b;
+}
+#map {
+    height: 500px;
+    width: 100%;
+    border-radius: 12px;
+    z-index: 1;
+}
 @media (max-width: 1100px) {
     .stats-grid, .charts-grid { grid-template-columns: 1fr; }
 }
@@ -198,6 +255,34 @@
             </div>
         </div>
     </div>
+
+    <!-- SECTION CARTE -->
+    <div class="map-section">
+        <div class="map-card">
+            <div class="map-header">
+                <h3 class="chart-title" style="margin-bottom:0;">🗺️ Carte des sites</h3>
+                <div class="map-filters">
+                    <button class="map-filter-btn active" data-filter="all">Tous</button>
+                    <button class="map-filter-btn" data-filter="FO">FO</button>
+                    <button class="map-filter-btn" data-filter="FH">FH</button>
+                    <button class="map-filter-btn" data-filter="SHARED">SHARED</button>
+                </div>
+            </div>
+            <div class="import-section" style="margin-bottom:15px;">
+                <form method="post" action="{{ path('superuser_map_import') }}" enctype="multipart/form-data" id="import-gps-form">
+                    <input type="file" name="gps_file" accept=".xlsx,.xls,.csv" required>
+                    <button type="submit" class="btn-secondary">📂 Importer coordonnées GPS</button>
+                </form>
+                <div class="import-message">Fichier Excel ou CSV avec colonnes : site (nom du site), latitude, longitude</div>
+            </div>
+            <div id="map"></div>
+            <div class="legend" style="margin-top: 12px;">
+                <div class="legend-item"><span class="legend-dot" style="background:#dc2626;"></span> Critique (rouge)</div>
+                <div class="legend-item"><span class="legend-dot" style="background:#f59e0b;"></span> Sous observation (jaune)</div>
+                <div class="legend-item"><span class="legend-dot" style="background:#10b981;"></span> Sécurisé (vert)</div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -205,125 +290,98 @@ document.addEventListener('DOMContentLoaded', function () {
     const classificationStats = {{ classificationStats|json_encode|raw }};
     const serviceDistribution = {{ serviceDistribution|json_encode|raw }};
 
+    // Graphique classification (inchangé)
     const wantedClasses = ['TF', 'COTRANS', 'NO_COTRANS', 'NON_TDD'];
-
     const labels = wantedClasses;
     const totalData = labels.map(label => classificationStats[label]?.total || 0);
     const criticalData = labels.map(label => classificationStats[label]?.critical || 0);
 
-    const classCtx = document.getElementById('classificationChart');
-
-    new Chart(classCtx, {
+    new Chart(document.getElementById('classificationChart'), {
         type: 'bar',
         data: {
             labels: labels,
             datasets: [
-                {
-                    label: 'Total',
-                    data: totalData,
-                    backgroundColor: '#3b82f6',
-                    borderRadius: 6
-                },
-                {
-                    label: 'Critique',
-                    data: criticalData,
-                    backgroundColor: '#ef4444',
-                    borderRadius: 6
-                }
+                { label: 'Total', data: totalData, backgroundColor: '#3b82f6', borderRadius: 6 },
+                { label: 'Critique', data: criticalData, backgroundColor: '#ef4444', borderRadius: 6 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
-            },
-            plugins: {
-                tooltip: {
-                    enabled: true,
-                    backgroundColor: '#ffffff',
-                    titleColor: '#020617',
-                    bodyColor: '#2563eb',
-                    borderColor: '#e2e8f0',
-                    borderWidth: 1,
-                    padding: 14,
-                    displayColors: true,
-                    callbacks: {
-                        title: function(items) {
-                            return items[0].label;
-                        },
-                        label: function(context) {
-                            return context.dataset.label + ' : ' + context.raw;
-                        }
-                    }
-                },
-                legend: {
-                    position: 'bottom'
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        precision: 0
-                    },
-                    title: {
-                        display: true,
-                        text: 'Nombre de sites'
-                    },
-                    grid: {
-                        color: '#e2e8f0',
-                        borderDash: [5, 5]
-                    }
-                },
-                x: {
-                    grid: {
-                        display: false
-                    }
-                }
-            }
+            plugins: { tooltip: { backgroundColor: '#fff', titleColor: '#020617', bodyColor: '#2563eb' }, legend: { position: 'bottom' } },
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Nombre de sites' } } }
         }
     });
 
-    const serviceCtx = document.getElementById('serviceDonut');
-
-    new Chart(serviceCtx, {
+    new Chart(document.getElementById('serviceDonut'), {
         type: 'doughnut',
         data: {
             labels: ['FO', 'FH', 'SHARED'],
             datasets: [{
-                data: [
-                    serviceDistribution.FO || 0,
-                    serviceDistribution.FH || 0,
-                    serviceDistribution.SHARED || 0
-                ],
+                data: [serviceDistribution.FO || 0, serviceDistribution.FH || 0, serviceDistribution.SHARED || 0],
                 backgroundColor: ['#3b82f6', '#14b8a6', '#8b5cf6'],
-                borderColor: '#ffffff',
                 borderWidth: 4,
                 hoverOffset: 8
             }]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '55%',
-            plugins: {
-                tooltip: {
-                    enabled: true,
-                    backgroundColor: '#ffffff',
-                    titleColor: '#020617',
-                    bodyColor: '#2563eb',
-                    borderColor: '#e2e8f0',
-                    borderWidth: 1,
-                    padding: 14
-                },
-                legend: {
-                    display: false
-                }
-            }
-        }
+        options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { display: false } } }
     });
+
+    // ==================== CARTE ====================
+    let map = L.map('map').setView([34.5, 9.5], 7); // Centre Tunisie
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> & CartoDB'
+    }).addTo(map);
+
+    let currentLayer = null;
+    let currentFilter = 'all';
+
+    function loadMapData(filter) {
+        fetch(`{{ path('superuser_map_data') }}?filter=${filter}`)
+            .then(response => response.json())
+            .then(data => {
+                if (currentLayer) map.removeLayer(currentLayer);
+                const markers = L.geoJSON(data, {
+                    pointToLayer: function(feature, latlng) {
+                        const color = feature.properties.color;
+                        const fillColor = color === 'red' ? '#dc2626' : (color === 'yellow' ? '#f59e0b' : '#10b981');
+                        return L.circleMarker(latlng, {
+                            radius: 8,
+                            fillColor: fillColor,
+                            color: '#fff',
+                            weight: 1,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        });
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const p = feature.properties;
+                        layer.bindPopup(`
+                            <strong>${p.name}</strong><br>
+                            Service: ${p.service}<br>
+                            Statut: ${p.status}<br>
+                            Trafic: ${p.traffic} Mbps
+                        `);
+                    }
+                });
+                markers.addTo(map);
+                currentLayer = markers;
+            })
+            .catch(err => console.error('Erreur chargement carte:', err));
+    }
+
+    // Filtres carte
+    document.querySelectorAll('.map-filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.map-filter-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentFilter = this.dataset.filter;
+            loadMapData(currentFilter);
+        });
+    });
+
+    // Chargement initial
+    loadMapData('all');
 });
 </script>
 {% endblock %}

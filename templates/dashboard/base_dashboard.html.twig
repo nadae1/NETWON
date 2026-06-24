@@ -6,6 +6,7 @@
     <title>NetWON Dashboard</title>
     <link rel="stylesheet" href="{{ asset('assets/css/dashboard.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/workflow.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
 {% set currentRoute = app.request.attributes.get('_route') %}
@@ -45,15 +46,17 @@
                     <a class="nav-link {{ currentRoute == 'superuser_dashboard_alerts' ? 'active' : '' }}" href="{{ path('superuser_dashboard_alerts') }}">Alerts</a>
                     <a class="nav-link {{ currentRoute starts with 'superuser_workflow_' ? 'active' : '' }}" href="{{ path('superuser_workflow_index') }}">Workflow</a>
 
-                {% elseif is_granted('ROLE_USER') %}
-                    <a class="nav-link {{ currentRoute == 'user_dashboard_home' ? 'active' : '' }}" href="{{ path('user_dashboard_home') }}">Home</a>
-                    <a class="nav-link {{ currentRoute == 'dashboard_import' ? 'active' : '' }}" href="{{ path('dashboard_import') }}">Import</a>
-                    <a class="nav-link {{ currentRoute == 'dashboard_export' ? 'active' : '' }}" href="{{ path('dashboard_export') }}">Export</a>
-                    <a class="nav-link {{ currentRoute == 'dashboard_kpis' ? 'active' : '' }}" href="{{ path('dashboard_kpis') }}">KPIs</a>
-                    <a class="nav-link {{ currentRoute == 'user_dashboard_sites' ? 'active' : '' }}" href="{{ path('user_dashboard_sites') }}">Sites</a>
-                    <a class="nav-link {{ currentRoute == 'user_dashboard_alerts' ? 'active' : '' }}" href="{{ path('user_dashboard_alerts') }}">Alerts</a>
-                    <a class="nav-link {{ currentRoute starts with 'dashboard_workflow' ? 'active' : '' }}" href="{{ path('dashboard_workflow') }}">Workflow</a>
-                {% endif %}
+               {% elseif is_granted('ROLE_USER') %}
+    <a class="nav-link {{ currentRoute == 'user_dashboard_home' ? 'active' : '' }}" href="{{ path('user_dashboard_home') }}">Home</a>
+    <a class="nav-link {{ currentRoute == 'dashboard_import' ? 'active' : '' }}" href="{{ path('dashboard_import') }}">Import</a>
+    <a class="nav-link {{ currentRoute == 'dashboard_export' ? 'active' : '' }}" href="{{ path('dashboard_export') }}">Export</a>
+    <a class="nav-link {{ currentRoute == 'dashboard_kpis' ? 'active' : '' }}" href="{{ path('dashboard_kpis') }}">KPIs</a>
+    <a class="nav-link {{ currentRoute == 'user_dashboard_sites' ? 'active' : '' }}" href="{{ path('user_dashboard_sites') }}">Sites</a>
+    <a class="nav-link {{ currentRoute == 'user_dashboard_alerts' ? 'active' : '' }}" href="{{ path('user_dashboard_alerts') }}">Alerts</a>
+    <a class="nav-link {{ currentRoute starts with 'dashboard_workflow' ? 'active' : '' }}" href="{{ path('dashboard_workflow') }}">Workflow</a>
+{% endif %}
+
+                
 
                 {% if is_granted('ROLE_USER') %}
                     {% set unread = unread_notifications_count() %}

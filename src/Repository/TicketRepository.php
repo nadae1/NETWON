@@ -106,4 +106,7 @@ class TicketRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
-}
+
+
+    
+    }

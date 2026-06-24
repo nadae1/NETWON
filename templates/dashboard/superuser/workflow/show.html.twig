@@ -158,14 +158,13 @@
 
     <div class="workflow-grid">
 
+        {# ===== Informations générales ===== #}
         <div class="workflow-card">
             <h3>Informations générales</h3>
-
             <div class="table-like">
                 <div class="table-row">
                     <div><strong>Action</strong></div>
                     <div>{{ ticket.actionType }}</div>
-
                     <div><strong>Statut</strong></div>
                     <div>
                         {% if ticket.status == 'open' %}
@@ -181,7 +180,6 @@
                         {% endif %}
                     </div>
                 </div>
-
                 <div class="table-row">
                     <div><strong>Progression</strong></div>
                     <div>
@@ -190,19 +188,15 @@
                             <div class="workflow-progress-bar" style="width: {{ ticket.progress }}%;"></div>
                         </div>
                     </div>
-
                     <div><strong>Date limite</strong></div>
                     <div>{{ ticket.deadlineAt ? ticket.deadlineAt|date('d/m/Y H:i') : '-' }}</div>
                 </div>
-
                 <div class="table-row">
                     <div><strong>Créé par</strong></div>
                     <div>{{ ticket.createdBy.username ?? ticket.createdBy.email ?? 'Utilisateur' }}</div>
-
                     <div><strong>Date création</strong></div>
                     <div>{{ ticket.createdAt ? ticket.createdAt|date('d/m/Y H:i') : '-' }}</div>
                 </div>
-
                 <div class="table-row">
                     <div><strong>Bloqué chez</strong></div>
                     <div>
@@ -212,23 +206,21 @@
                                 {% set blocker = task.assignedTo.username ?? task.assignedTo.email %}
                             {% endif %}
                         {% endfor %}
-
                         {% if blocker %}
                             <span class="badge red">{{ blocker }}</span>
                         {% else %}
                             <span class="badge green">Aucun blocage</span>
                         {% endif %}
                     </div>
-
                     <div><strong>Clôturé le</strong></div>
                     <div>{{ ticket.closedAt ? ticket.closedAt|date('d/m/Y H:i') : '-' }}</div>
                 </div>
             </div>
         </div>
 
+        {# ===== Sites concernés ===== #}
         <div class="workflow-card">
             <h3>Sites concernés</h3>
-
             {% if ticket.ticketSites is empty %}
                 <div class="empty-state">Aucun site lié.</div>
             {% else %}
@@ -239,7 +231,6 @@
                         <div>Service</div>
                         <div>Info</div>
                     </div>
-
                     {% for ticketSite in ticket.ticketSites %}
                         <div class="table-row">
                             <div><strong>{{ ticketSite.siteName }}</strong></div>
@@ -252,9 +243,9 @@
             {% endif %}
         </div>
 
+        {# ===== Tâches ===== #}
         <div class="workflow-card">
             <h3>Tâches</h3>
-
             {% if ticket.tasks is empty %}
                 <div class="empty-state">Aucune tâche.</div>
             {% else %}
@@ -265,7 +256,6 @@
                         <div>Statut</div>
                         <div>Preuve</div>
                     </div>
-
                     {% for task in ticket.tasks %}
                         <div class="table-row">
                             <div>
@@ -273,12 +263,10 @@
                                 <div class="muted">{{ task.title ?: 'Traitement demandé' }}</div>
                                 <div class="muted">{{ task.description ?: '-' }}</div>
                             </div>
-
                             <div>
                                 {{ task.serviceName ?: '-' }}
                                 <div class="muted">{{ task.departmentName ?: '-' }}</div>
                             </div>
-
                             <div>
                                 {% if task.status == 'pending' %}
                                     <span class="badge mauve">En attente</span>
@@ -291,23 +279,18 @@
                                 {% else %}
                                     <span class="badge red">{{ task.status }}</span>
                                 {% endif %}
-
                                 {% if task.completedAt %}
                                     <div class="muted">{{ task.completedAt|date('d/m/Y H:i') }}</div>
                                 {% endif %}
                             </div>
-
                             <div>
                                 {% if task.comment %}
                                     <div>{{ task.comment }}</div>
                                 {% else %}
                                     <div>-</div>
                                 {% endif %}
-
                                 {% if task.proofFile %}
-                                    <a href="{{ asset('uploads/ticket_proofs/' ~ task.proofFile) }}" target="_blank">
-                                        Voir fichier
-                                    </a>
+                                    <a href="{{ asset('uploads/ticket_proofs/' ~ task.proofFile) }}" target="_blank">Voir fichier</a>
                                 {% endif %}
                             </div>
                         </div>
@@ -316,9 +299,9 @@
             {% endif %}
         </div>
 
+        {# ===== Commentaires (corrigé définitif) ===== #}
         <div class="workflow-card">
             <h3>Commentaires</h3>
-
             {% if ticket.comments is empty %}
                 <div class="empty-state">Aucun commentaire.</div>
             {% else %}
@@ -329,35 +312,37 @@
                         <div>Pièce jointe</div>
                         <div>Date</div>
                     </div>
-
                     {% for comment in ticket.comments %}
                         <div class="table-row">
                             <div>
-                                <strong>{{ comment.user.username ?? comment.user.email }}</strong>
+                                <strong>
+                                    {{ comment.author|default(comment.user.username|default(comment.user.email|default('Anonyme'))) }}
+                                </strong>
                             </div>
-
-                            <div>{{ comment.message }}</div>
-
+                            <div>{{ comment.text|default(comment.message|default('')) }}</div>
                             <div>
-                                {% if comment.filePath %}
-                                    <a href="{{ asset('uploads/ticket_proofs/' ~ comment.filePath) }}" target="_blank">
+                                {% set filePath = comment.file_url|default(comment.filePath|default(null)) %}
+                                {% if filePath %}
+                                    <a href="{{ asset('uploads/ticket_proofs/' ~ filePath) }}" target="_blank">
                                         Pièce jointe
                                     </a>
                                 {% else %}
                                     -
                                 {% endif %}
                             </div>
-
-                            <div>{{ comment.createdAt|date('d/m/Y H:i') }}</div>
+                            <div>
+                                {% set date = comment.timestamp|default(comment.createdAt|default(null)) %}
+                                {{ date is not null ? (date|date('d/m/Y H:i')) : '-' }}
+                            </div>
                         </div>
                     {% endfor %}
                 </div>
             {% endif %}
         </div>
 
+        {# ===== Historique ===== #}
         <div class="workflow-card">
             <h3>Historique</h3>
-
             {% if ticket.history is empty %}
                 <div class="empty-state">Aucun historique.</div>
             {% else %}
@@ -368,7 +353,6 @@
                         <div>Détails</div>
                         <div>Utilisateur</div>
                     </div>
-
                     {% for item in ticket.history %}
                         <div class="table-row">
                             <div>{{ item.createdAt|date('d/m/Y H:i') }}</div>

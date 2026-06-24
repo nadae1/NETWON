@@ -1,31 +1,35 @@
 <?php
-// src/Service/FastApiPortDetector.php
-
 namespace App\Service;
+
+use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class FastApiPortDetector
 {
+    private $httpClient;
+    private $apiPort = null;
+
+    public function __construct(HttpClientInterface $httpClient)
+    {
+        $this->httpClient = $httpClient;
+    }
+
     public function detectPort(): ?int
     {
-        $ports = [8001, 8002, 8010];
-
+        if ($this->apiPort !== null) {
+            return $this->apiPort;
+        }
+        $ports = [8001, 8000, 8002];
         foreach ($ports as $port) {
-            $ch = curl_init("http://127.0.0.1:$port/health");
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 2,
-                CURLOPT_CONNECTTIMEOUT => 2,
-            ]);
-
-            curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode === 200) {
-                return $port;
+            try {
+                $response = $this->httpClient->request('GET', "http://127.0.0.1:$port/health", ['timeout' => 2]);
+                if ($response->getStatusCode() === 200) {
+                    $this->apiPort = $port;
+                    return $port;
+                }
+            } catch (\Exception $e) {
+                continue;
             }
         }
-
         return null;
     }
 
