@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Rapport Workflows - {{ monthLabel }}</title>
+    <style>
+        body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 12px; color: #0f172a; margin: 20px; }
+        .header { text-align: center; margin-bottom: 24px; }
+        .header h1 { color: #ff7900; font-size: 26px; margin: 0; }
+        .header .sub { color: #64748b; font-size: 13px; }
+        .stats { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+        .stat-box { background: #f1f5f9; padding: 12px 20px; border-radius: 8px; flex: 1; min-width: 120px; text-align: center; }
+        .stat-box .number { font-size: 28px; font-weight: 800; color: #0f172a; }
+        .stat-box .label { font-size: 11px; color: #64748b; text-transform: uppercase; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+        th { background: #e2e8f0; padding: 8px 6px; text-align: left; border: 1px solid #cbd5e1; }
+        td { padding: 6px; border: 1px solid #e2e8f0; vertical-align: top; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; }
+        .badge-open { background: #dbeafe; color: #2563eb; }
+        .badge-in_progress { background: #fef3c7; color: #d97706; }
+        .badge-blocked { background: #fee2e2; color: #dc2626; }
+        .badge-completed { background: #dcfce7; color: #16a34a; }
+        .badge-closed { background: #e2e8f0; color: #475569; }
+        .footer { margin-top: 24px; text-align: center; color: #94a3b8; font-size: 10px; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+        .site-list { font-size: 10px; }
+        .site-list span { display: inline-block; background: #f1f5f9; border-radius: 10px; padding: 0 6px; margin: 1px; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>📊 Rapport Workflows</h1>
+    <div class="sub">{{ monthLabel }} · {{ start|date('d/m/Y') }} → {{ end|date('d/m/Y') }}</div>
+</div>
+
+<div class="stats">
+    <div class="stat-box"><div class="number">{{ stats.total }}</div><div class="label">Total Workflows</div></div>
+    <div class="stat-box"><div class="number">{{ stats.closed }}</div><div class="label">Clôturés</div></div>
+    <div class="stat-box"><div class="number">{{ stats.overdue }}</div><div class="label">En retard</div></div>
+    <div class="stat-box"><div class="number">{{ totalSites }}</div><div class="label">Sites traités</div></div>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Workflow</th>
+            <th>Sites associés</th>
+            <th>Action</th>
+            <th>Users</th>
+            <th>Statut</th>
+            <th>Sites traités</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for wf in workflows %}
+        {% set completedSites = 0 %}
+        {% for site in wf.ticketSites %}
+            {% if site.status == 'completed' %}
+                {% set completedSites = completedSites + 1 %}
+            {% endif %}
+        {% endfor %}
+        <tr>
+            <td><strong>{{ wf.title }}</strong><br><small>#{{ wf.id }}</small></td>
+            <td class="site-list">
+                {% for site in wf.ticketSites %}
+                    <span>{{ site.siteName }}</span>
+                {% else %}
+                    -
+                {% endfor %}
+            </td>
+            <td>{{ wf.actionType ?: '-' }}</td>
+            <td>
+                {% for user in wf.assignedUsers %}
+                    {{ user.username }}{% if not loop.last %}, {% endif %}
+                {% else %}
+                    -
+                {% endfor %}
+            </td>
+            <td><span class="badge badge-{{ wf.status|replace({'_': '-'}) }}">{{ wf.status|replace({'_': ' '})|title }}</span></td>
+            <td>{{ completedSites }} / {{ wf.ticketSites|length }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+<div class="footer">Généré le {{ 'now'|date('d/m/Y H:i') }}</div>
+</body>
+</html>

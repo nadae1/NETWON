@@ -6,42 +6,72 @@
 .workflow-head {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: 20px;
     margin-bottom: 30px;
 }
-.workflow-title { font-size: 32px; font-weight: 800; color: #07152f; margin: 0; }
-.workflow-subtitle { color: #60708a; font-size: 18px; margin-top: 6px; }
+.workflow-title-group {
+    display: flex;
+    flex-direction: column;
+}
+.workflow-subtitle {
+    color: #60708a;
+    font-size: 18px;
+    margin: 0;
+}
+.workflow-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
 
-.workflow-new-btn {
+/* ✅ Boutons rouge clair (poudre) */
+.workflow-btn {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    background: #0f172a;
-    color: white;
-    padding: 13px 20px;
+    gap: 8px;
+    background: #f8d7da;
+    color: #721c24;
+    padding: 12px 20px;
     border-radius: 12px;
     text-decoration: none;
-    font-weight: 800;
-    box-shadow: 0 8px 18px rgba(15, 23, 42, .20);
+    font-weight: 700;
+    font-size: 14px;
+    border: 1px solid #f5c6cb;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
 }
-.workflow-new-btn:hover { background: #1e293b; color: white; }
+.workflow-btn:hover {
+    background: #f1c0c6;
+    border-color: #e0a6ad;
+    color: #721c24;
+    text-decoration: none;
+}
+.workflow-btn.stats {
+    background: #f8d7da;
+    border-color: #f5c6cb;
+}
+.workflow-btn.stats:hover {
+    background: #f1c0c6;
+    border-color: #e0a6ad;
+}
 
 .workflow-filter {
     display: flex;
     align-items: center;
     gap: 14px;
     margin-bottom: 30px;
+    flex-wrap: wrap;
 }
 .workflow-filter-icon { font-size: 22px; color: #64748b; }
 .workflow-filter select {
-    width: 180px;
-    padding: 13px 16px;
-    border-radius: 13px;
+    padding: 10px 16px;
+    border-radius: 12px;
     border: 1px solid #dbe3ef;
     background: white;
     color: #0f172a;
-    font-size: 16px;
+    font-size: 14px;
+    min-width: 140px;
     box-shadow: 0 4px 12px rgba(15, 23, 42, .04);
 }
 .workflow-grid {
@@ -118,22 +148,27 @@
 }
 @media (max-width: 900px) {
     .workflow-grid { grid-template-columns: 1fr; }
-    .workflow-head { flex-direction: column; }
+    .workflow-head { flex-direction: column; align-items: stretch; }
+    .workflow-actions { justify-content: flex-start; flex-wrap: wrap; }
 }
 </style>
 
 <div class="workflow-home">
     <div class="workflow-head">
-        <div>
-            <h1 class="workflow-title">Workflows</h1>
+        <div class="workflow-title-group">
             <div class="workflow-subtitle">
                 {{ tickets|length }} workflows · Visualisation globale
             </div>
         </div>
 
-        <a href="{{ path('admin_workflow_export_statistics') }}" class="workflow-new-btn">
-            Export Statistics
-        </a>
+        <div class="workflow-actions">
+            <a href="{{ path('admin_workflow_export_statistics') }}" class="workflow-btn">
+                📊 Export Statistics
+            </a>
+            <a href="{{ path('admin_workflow_stats') }}" class="workflow-btn stats">
+                📅 Stats mensuelles
+            </a>
+        </div>
     </div>
 
     <form method="get" action="{{ path('admin_workflow_index') }}" class="workflow-filter">

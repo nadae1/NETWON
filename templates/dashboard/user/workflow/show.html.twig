@@ -1,0 +1,242 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="workflow-show">
+    <div class="workflow-header">
+        <div>
+            <h2 class="workflow-title">#{{ ticket.id }} - {{ ticket.title }}</h2>
+            <div class="workflow-desc">{{ ticket.description ?: 'Aucune description.' }}</div>
+        </div>
+        <div class="workflow-actions">
+            <a href="{{ path('user_dashboard_alerts') }}" class="btn">Retour aux alertes</a>
+        </div>
+    </div>
+
+    <div class="workflow-grid">
+        {# Informations générales #}
+        <div class="workflow-card {% if ticket.deadline and ticket.deadline < date() %}overdue{% endif %}">
+            <h3>Informations générales</h3>
+            <div class="table-like">
+                <div class="table-row">
+                    <div><strong>Statut</strong></div>
+                    <div>
+                        {% if ticket.status == 'open' %}
+                            <span class="badge mauve">Ouvert</span>
+                        {% elseif ticket.status == 'in_progress' %}
+                            <span class="badge blue">En cours</span>
+                        {% elseif ticket.status == 'completed' %}
+                            <span class="badge green">Terminé</span>
+                        {% elseif ticket.status == 'closed' %}
+                            <span class="badge green">Clôturé</span>
+                        {% else %}
+                            <span class="badge red">{{ ticket.status }}</span>
+                        {% endif %}
+                    </div>
+                    <div><strong>Progression</strong></div>
+                    <div>
+                        <div>{{ ticket.progress }}%</div>
+                        <div class="workflow-progress">
+                            <div class="workflow-progress-bar" style="width: {{ ticket.progress }}%;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-row">
+                    <div><strong>Date limite</strong></div>
+                    <div>{{ ticket.deadline ? ticket.deadline|date('d/m/Y H:i') : '-' }}</div>
+                    <div><strong>Créé le</strong></div>
+                    <div>{{ ticket.createdAt ? ticket.createdAt|date('d/m/Y H:i') : '-' }}</div>
+                </div>
+            </div>
+        </div>
+
+        {# Sites concernés #}
+        <div class="workflow-card">
+            <h3>Sites concernés</h3>
+            {% if ticket.ticketSites is empty %}
+                <div class="empty-state">Aucun site lié.</div>
+            {% else %}
+                <div class="table-like">
+                    <div class="table-row table-head">
+                        <div>Site</div>
+                        <div>Type Trans</div>
+                        <div>Service</div>
+                    </div>
+                    {% for ticketSite in ticket.ticketSites %}
+                        <div class="table-row">
+                            <div><strong>{{ ticketSite.siteName }}</strong></div>
+                            <div>{{ ticketSite.typeTrans ?: '-' }}</div>
+                            <div>{{ ticketSite.serviceName ?: '-' }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+
+        {# Tâches assignées à l'utilisateur #}
+        <div class="workflow-card">
+            <h3>Mes tâches</h3>
+            {% set userTasks = ticket.tasks|filter(task => task.assignedTo and task.assignedTo.id == app.user.id) %}
+            {% if userTasks is empty %}
+                <div class="empty-state">Aucune tâche assignée.</div>
+            {% else %}
+                <div class="table-like">
+                    <div class="table-row table-head">
+                        <div>Tâche</div>
+                        <div>Statut</div>
+                        <div>Date de fin</div>
+                    </div>
+                    {% for task in userTasks %}
+                        <div class="table-row">
+                            <div>
+                                <strong>{{ task.title ?: 'Traitement demandé' }}</strong>
+                                <div class="muted">{{ task.description ?: '-' }}</div>
+                            </div>
+                            <div>
+                                {% if task.status == 'pending' %}
+                                    <span class="badge mauve">En attente</span>
+                                {% elseif task.status == 'in_progress' %}
+                                    <span class="badge blue">En cours</span>
+                                {% elseif task.status == 'done' %}
+                                    <span class="badge green">Terminée</span>
+                                {% elseif task.status == 'blocked' %}
+                                    <span class="badge red">Bloquée</span>
+                                {% else %}
+                                    <span class="badge red">{{ task.status }}</span>
+                                {% endif %}
+                            </div>
+                            <div>{{ task.completedAt ? task.completedAt|date('d/m/Y H:i') : '-' }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+
+        {# Commentaires #}
+        <div class="workflow-card">
+            <h3>Commentaires</h3>
+            {% if ticket.comments is empty %}
+                <div class="empty-state">Aucun commentaire.</div>
+            {% else %}
+                <div class="table-like">
+                    <div class="table-row table-head">
+                        <div>Utilisateur</div>
+                        <div>Message</div>
+                        <div>Date</div>
+                    </div>
+                    {% for comment in ticket.comments %}
+                        <div class="table-row">
+                            <div>
+                                <strong>{{ comment.author ?? comment.user.username ?? 'Anonyme' }}</strong>
+                            </div>
+                            <div>{{ comment.text ?? comment.message ?? '' }}</div>
+                            <div>{{ comment.timestamp ? comment.timestamp|date('d/m/Y H:i') : (comment.createdAt ? comment.createdAt|date('d/m/Y H:i') : '-') }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .workflow-show { padding-bottom: 30px; }
+    .workflow-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 20px;
+        margin-bottom: 24px;
+    }
+    .workflow-title {
+        font-size: 30px;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0;
+    }
+    .workflow-desc {
+        margin-top: 6px;
+        color: #64748b;
+        font-size: 16px;
+    }
+    .workflow-actions { display: flex; gap: 10px; }
+    .workflow-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 18px;
+    }
+    .workflow-card {
+        background: #fff;
+        border: 1px solid #dbe3ef;
+        border-radius: 18px;
+        padding: 22px;
+        box-shadow: 0 6px 16px rgba(15, 23, 42, .04);
+    }
+    .workflow-card.overdue {
+        background: #f8f9fa;
+        border-color: #dc3545;
+        border-width: 2px;
+    }
+    .workflow-card h3 {
+        margin: 0 0 16px;
+        font-size: 19px;
+        font-weight: 800;
+        color: #0f172a;
+    }
+    .table-like {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .table-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+        align-items: center;
+        padding: 13px 14px;
+        background: #f8fafc;
+        border-radius: 13px;
+        color: #334155;
+    }
+    .table-head {
+        background: #e2e8f0;
+        font-weight: 800;
+        color: #0f172a;
+    }
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        padding: 6px 11px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 800;
+    }
+    .badge.mauve { background: #ede9fe; color: #7c3aed; }
+    .badge.blue { background: #dbeafe; color: #2563eb; }
+    .badge.green { background: #ccfbf1; color: #059669; }
+    .badge.red { background: #fee2e2; color: #ef4444; }
+    .muted { color: #64748b; font-size: 14px; margin-top: 4px; }
+    .empty-state {
+        padding: 22px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 14px;
+        color: #64748b;
+        background: #f8fafc;
+    }
+    .workflow-progress {
+        width: 100%;
+        height: 12px;
+        background: #e2e8f0;
+        border-radius: 999px;
+        overflow: hidden;
+    }
+    .workflow-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #3b82f6, #22c55e);
+    }
+    @media (max-width: 900px) {
+        .table-row { grid-template-columns: 1fr; }
+        .workflow-header { flex-direction: column; }
+    }
+</style>
+{% endblock %}

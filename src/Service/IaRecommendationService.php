@@ -11,11 +11,33 @@ use Doctrine\ORM\EntityManagerInterface;
 
 class IaRecommendationService
 {
+    public const ALL_ACTION_TYPES = [
+        'MONITORING'             => 'Maintenir sous surveillance',
+        'CAPACITY_UPGRADE_TDD'   => 'Upgrade capacité TDD',
+        'CAPACITY_UPGRADE_FDD'   => 'Upgrade capacité FDD',
+        'CAPACITY_UPGRADE_BOTH'  => 'Upgrade capacité TDD + FDD',
+        'TF_UPGRADE'             => 'Upgrade capacité TF',
+        'TF_SWAP'                => 'Swap TF',
+        'COTRANS_OPTIMIZATION'   => 'Optimisation COTRANS',
+        'NO_COTRANS_REVIEW'      => 'Revue configuration NO_COTRANS',
+        'FDD_ANALYSIS'           => 'Analyse FDD approfondie',
+        'FO_UPGRADE'             => 'Upgrade fibre optique (FO)',
+        'FH_UPGRADE'             => 'Upgrade faisceau hertzien (FH)',
+        'BACKBONE_UPGRADE'       => 'Upgrade Backbone',
+        'NEW_NEED'               => 'Nouveau besoin de capacité',
+        'NO_ACTION'              => 'Aucune action nécessaire',
+    ];
+
     public function __construct(
         private EntityManagerInterface $em,
         private ?NotificationService $notificationService = null,
         private ?WorkflowEngineService $workflowEngine = null
     ) {}
+
+    public function getAllActionTypes(): array
+    {
+        return self::ALL_ACTION_TYPES;
+    }
 
     public function analyzeSites(array $sites): array
     {
@@ -44,36 +66,57 @@ class IaRecommendationService
     private function analyzeSingleSite(ProcessedSite $site): ?array
     {
         $maxTrafic = (float) $site->getMaxTrafic();
-        $seuil = (float) $site->getSeuilCritique();
+        $capaciteMbps = (float) ($site->getCapaciteMbps() ?? 0);
         $classification = $site->getClassification();
         $typeTrans = $site->getTypeTrans();
         $service = $site->getService();
         $occurrences = $site->getNombreOccurrences();
 
-        $congestionLevel = $seuil > 0 ? ($maxTrafic / $seuil) * 100 : 0;
+        // Taux d'utilisation (affichage uniquement, ne pilote plus la sévérité)
+        $tauxUtilStockee = $site->getTauxUtilisation();
+        if ($tauxUtilStockee !== null) {
+            $tauxGlobal = round((float) $tauxUtilStockee, 1);
+        } else {
+            $tauxGlobal = ($capaciteMbps > 0) ? round(($maxTrafic / $capaciteMbps) * 100, 1) : 0.0;
+        }
 
-        if ($congestionLevel >= 95 || $occurrences > 100) {
-            $status = 'CRITICAL_CONGESTION';
+        $tauxTdd = $site->getTauxUtilisationTdd();
+        $tauxFdd = $site->getTauxUtilisationFdd();
+
+        // Sévérité basée sur le VRAI état calculé par le pipeline
+        $etatReel = $site->getStatus() ?? 'NON_EVALUE';
+        $siteStatusReel = $site->getSiteStatus() ?? 'NON_EVALUE';
+        $isCriticalReel = $site->isCritical();
+
+        if ($isCriticalReel) {
             $severity = 'critical';
-            $description = '⚠️ Site très congestionné (>95% du seuil ou >100 occurrences)';
+            $statusLabel = 'CRITICAL';
             $borderColor = '#dc2626';
-        } elseif ($congestionLevel >= 80 || $occurrences > 50) {
-            $status = 'CONGESTION';
+            $description = match (true) {
+                str_starts_with($etatReel, 'CONGESTION') => '🔴 Congestion confirmée (taux critique et occurrences répétées)',
+                $etatReel === 'BRIDAGE' => '🔴 Bridage suspecté (occurrences élevées à taux modéré)',
+                default => '🔴 État critique confirmé',
+            };
+        } elseif ($etatReel === 'RISQUE_DE_CONGESTION') {
             $severity = 'high';
-            $description = '🔴 Site congestionné (>80% du seuil)';
+            $statusLabel = 'HIGH';
+            $description = '🟠 Risque de congestion (taux ≥ seuil, occurrences pas encore confirmées)';
             $borderColor = '#ef4444';
-        } elseif ($congestionLevel >= 60 || $occurrences > 20) {
-            $status = 'WARNING';
+        } elseif ($etatReel === 'SANS_TYPE' || $siteStatusReel === 'SURVEILLANCE') {
             $severity = 'medium';
-            $description = '🟠 Site sous tension (>60% du seuil)';
+            $statusLabel = 'MEDIUM';
+            $description = $etatReel === 'SANS_TYPE'
+                ? '🟡 Type de liaison manquant : évaluation non fiabilisée'
+                : '🟡 Sous surveillance';
             $borderColor = '#f59e0b';
         } else {
-            $status = 'NORMAL';
             $severity = 'low';
-            $description = '✅ Site normal';
+            $statusLabel = 'LOW';
+            $description = '🟢 Taux normal';
             $borderColor = '#10b981';
         }
 
+        // Actions recommandées
         $actions = [];
 
         if ($classification === 'TF') {
@@ -100,7 +143,7 @@ class IaRecommendationService
                 'estimatedEffort' => '1 jour',
                 'teams' => ['IP']
             ];
-        } elseif ($classification === 'FDD') {
+        } elseif ($classification === 'FDD' || $classification === 'ONLY_FDD') {
             $actions[] = [
                 'type' => 'FDD_ANALYSIS',
                 'label' => 'Analyse FDD approfondie',
@@ -110,7 +153,7 @@ class IaRecommendationService
             ];
         }
 
-        if (stripos($typeTrans ?? '', 'FO') !== false && $congestionLevel >= 80) {
+        if (stripos($typeTrans ?? '', 'FO') !== false && $tauxGlobal >= 80) {
             $actions[] = [
                 'type' => 'FO_UPGRADE',
                 'label' => 'Upgrade fibre optique (FO)',
@@ -118,7 +161,7 @@ class IaRecommendationService
                 'estimatedEffort' => '3-5 jours',
                 'teams' => ['INGENIERIE_CAPILLAIRE', 'DEPLOIEMENT', 'IP']
             ];
-        } elseif (stripos($typeTrans ?? '', 'FH') !== false && $congestionLevel >= 80) {
+        } elseif (stripos($typeTrans ?? '', 'FH') !== false && $tauxGlobal >= 80) {
             $actions[] = [
                 'type' => 'FH_UPGRADE',
                 'label' => 'Upgrade faisceau hertzien (FH)',
@@ -126,7 +169,7 @@ class IaRecommendationService
                 'estimatedEffort' => '2-3 jours',
                 'teams' => ['IP', 'RADIO']
             ];
-        } elseif ((stripos($typeTrans ?? '', 'BACKBONE') !== false || stripos($typeTrans ?? '', 'BH') !== false) && $congestionLevel >= 70) {
+        } elseif ((stripos($typeTrans ?? '', 'BACKBONE') !== false || stripos($typeTrans ?? '', 'BH') !== false) && $tauxGlobal >= 70) {
             $actions[] = [
                 'type' => 'BACKBONE_UPGRADE',
                 'label' => 'Upgrade Backbone',
@@ -146,6 +189,20 @@ class IaRecommendationService
             ];
         }
 
+        // ✅ Génération des données de trafic pour les graphiques (simulation)
+        $currentValues = [];
+        $afterValues = [];
+        $labels = [];
+        $now = new \DateTime();
+        for ($i = 6; $i >= 0; $i--) {
+            $date = (clone $now)->modify("-$i days");
+            $labels[] = $date->format('d/m');
+            $base = $maxTrafic * (0.8 + (mt_rand(0, 40) / 100));
+            $currentValues[] = round($base, 2);
+            $reduction = in_array($severity, ['critical', 'high']) ? 0.30 : 0.10;
+            $afterValues[] = round($base * (1 - $reduction), 2);
+        }
+
         return [
             'siteId' => $site->getId(),
             'siteName' => $site->getSiteName(),
@@ -154,15 +211,70 @@ class IaRecommendationService
             'service' => $service,
             'typeTrans' => $typeTrans,
             'maxTrafic' => round($maxTrafic, 2),
-            'seuilCritique' => round($seuil, 2),
-            'congestionLevel' => round($congestionLevel, 1),
-            'status' => $status,
+            'capaciteMbps' => round($capaciteMbps, 2),
+            'tauxGlobal' => $tauxGlobal,
+            'tauxTdd' => $tauxTdd !== null ? round((float) $tauxTdd, 1) : null,
+            'tauxFdd' => $tauxFdd !== null ? round((float) $tauxFdd, 1) : null,
+            'status' => $statusLabel,
             'severity' => $severity,
             'description' => $description,
             'borderColor' => $borderColor,
             'recommendedActions' => $actions,
             'nombreOccurrences' => $occurrences,
-            'isCritical' => $site->isCritical()
+            'isCritical' => $isCriticalReel,
+            'etatReel' => $etatReel,
+            'siteStatusReel' => $siteStatusReel,
+            // ✅ Données pour les graphiques avant/après
+            'currentTrafficData' => [
+                'labels' => $labels,
+                'values' => $currentValues,
+            ],
+            'afterActionData' => [
+                'labels' => $labels,
+                'values' => $afterValues,
+            ],
+        ];
+    }
+
+    public function confirmSeverityFromGraph(array $trafficValues, string $severity): array
+    {
+        $n = count($trafficValues);
+        if ($n < 4) {
+            return [
+                'confirmed' => null,
+                'trend' => 'insuffisant',
+                'variation' => 0,
+                'label' => 'ℹ️ Données insuffisantes pour confirmation graphique',
+            ];
+        }
+
+        $mid = intdiv($n, 2);
+        $firstHalfAvg = array_sum(array_slice($trafficValues, 0, $mid)) / max(1, $mid);
+        $secondHalfAvg = array_sum(array_slice($trafficValues, $mid)) / max(1, $n - $mid);
+
+        $variation = $firstHalfAvg > 0 ? (($secondHalfAvg - $firstHalfAvg) / $firstHalfAvg) * 100 : 0;
+
+        if ($variation > 10) {
+            $trend = 'hausse';
+        } elseif ($variation < -10) {
+            $trend = 'baisse';
+        } else {
+            $trend = 'stable';
+        }
+
+        $isHighSeverity = in_array($severity, ['critical', 'high'], true);
+        $confirmed = ($isHighSeverity && in_array($trend, ['hausse', 'stable'], true))
+            || (!$isHighSeverity && $trend !== 'hausse');
+
+        $label = $confirmed
+            ? '✅ Confirmé par analyse des courbes KPI'
+            : '⚠️ À vérifier manuellement (courbe non concordante)';
+
+        return [
+            'confirmed' => $confirmed,
+            'trend' => $trend,
+            'variation' => round($variation, 1),
+            'label' => $label,
         ];
     }
 
@@ -198,18 +310,28 @@ class IaRecommendationService
         return $stats;
     }
 
-    public function createWorkflowFromRecommendations(array $validatedActions, User $createdBy, ?\DateTimeInterface $deadline = null): Ticket
-    {
+    public function createWorkflowFromRecommendations(
+        array $validatedActions,
+        User $createdBy,
+        ?\DateTimeInterface $deadline = null,
+        string $priority = 'medium',
+        ?string $title = null
+    ): Ticket {
         $ticket = new Ticket();
-        $ticket->setTitle('[IA] Plan Data - ' . date('d/m/Y'));
+        $ticket->setTitle($title !== null && $title !== '' ? $title : ('[IA] Plan Data - ' . date('d/m/Y')));
         $ticket->setDescription('Workflow généré automatiquement à partir des recommandations IA - ' . count($validatedActions) . ' sites à traiter');
         $ticket->setActionType('PLAN_DATA_IA');
         $ticket->setStatus('open');
         $ticket->setProgress(0);
         $ticket->setCreatedBy($createdBy);
         $ticket->setCreatedAt(new \DateTime());
+        $ticket->setTotalSteps(7);
+        $ticket->setCurrentStep(1);
         if ($deadline) {
             $ticket->setDeadline($deadline);
+        }
+        if (method_exists($ticket, 'setPriority')) {
+            $ticket->setPriority($priority);
         }
 
         $this->em->persist($ticket);
@@ -223,6 +345,14 @@ class IaRecommendationService
                 $ticketSite->setSiteName($site->getSiteName());
                 $ticketSite->setTypeTrans($site->getTypeTrans());
                 $ticketSite->setServiceName($site->getService());
+
+                if (method_exists($ticketSite, 'setActionType') && !empty($action['actionType'])) {
+                    $ticketSite->setActionType($action['actionType']);
+                }
+                if (method_exists($ticketSite, 'setComment') && !empty($action['comment'])) {
+                    $ticketSite->setComment($action['comment']);
+                }
+
                 $this->em->persist($ticketSite);
                 $sites[] = $site;
             }

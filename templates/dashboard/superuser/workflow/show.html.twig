@@ -30,6 +30,7 @@
 .workflow-actions {
     display: flex;
     gap: 10px;
+    flex-wrap: wrap;
 }
 
 .workflow-grid {
@@ -86,24 +87,50 @@
     font-weight: 800;
 }
 
-.badge.mauve {
-    background: #ede9fe;
-    color: #7c3aed;
+.badge.mauve { background: #ede9fe; color: #7c3aed; }
+.badge.blue { background: #dbeafe; color: #2563eb; }
+.badge.green { background: #ccfbf1; color: #059669; }
+.badge.red { background: #fee2e2; color: #ef4444; }
+.badge.yellow { background: #fef9c3; color: #ca8a04; }
+.badge.gray { background: #f1f5f9; color: #475569; }
+.badge.purple { background: #f3e8ff; color: #6b21a5; }
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 14px;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: background .15s, border-color .15s;
 }
 
-.badge.blue {
-    background: #dbeafe;
-    color: #2563eb;
+.btn-primary {
+    background: #3b82f6;
+    color: #fff;
+}
+.btn-primary:hover {
+    background: #2563eb;
 }
 
-.badge.green {
-    background: #ccfbf1;
-    color: #059669;
+.btn-success {
+    background: #22c55e;
+    color: #fff;
+}
+.btn-success:hover {
+    background: #16a34a;
 }
 
-.badge.red {
-    background: #fee2e2;
-    color: #ef4444;
+.btn-outline {
+    background: transparent;
+    border-color: #cbd5e1;
+    color: #334155;
+}
+.btn-outline:hover {
+    background: #f1f5f9;
 }
 
 .muted {
@@ -152,7 +179,13 @@
         </div>
 
         <div class="workflow-actions">
-            <a href="{{ path('superuser_workflow_index') }}" class="btn">Retour</a>
+            {# Bouton de validation KPI si le ticket est en attente de validation superuser #}
+            {% if canValidate and ticket.status == 'waiting_superuser' %}
+                <a href="{{ path('superuser_validation_ticket', {id: ticket.id}) }}" class="btn btn-success">
+                    ✅ Valider les KPI
+                </a>
+            {% endif %}
+            <a href="{{ path('superuser_workflow_index') }}" class="btn btn-outline">Retour</a>
         </div>
     </div>
 
@@ -175,6 +208,8 @@
                             <span class="badge green">Terminé</span>
                         {% elseif ticket.status == 'closed' %}
                             <span class="badge green">Clôturé</span>
+                        {% elseif ticket.status == 'waiting_superuser' %}
+                            <span class="badge purple">En attente validation</span>
                         {% else %}
                             <span class="badge red">{{ ticket.status }}</span>
                         {% endif %}
@@ -189,7 +224,17 @@
                         </div>
                     </div>
                     <div><strong>Date limite</strong></div>
-                    <div>{{ ticket.deadlineAt ? ticket.deadlineAt|date('d/m/Y H:i') : '-' }}</div>
+                    <div>
+                        {% if ticket.deadline %}
+                            {% set now = date() %}
+                            {% set diff = date(ticket.deadline) >= now %}
+                            <span class="badge {% if diff %}blue{% else %}red{% endif %}">
+                                {{ ticket.deadline|date('d/m/Y H:i') }}
+                            </span>
+                        {% else %}
+                            <span class="badge gray">Non définie</span>
+                        {% endif %}
+                    </div>
                 </div>
                 <div class="table-row">
                     <div><strong>Créé par</strong></div>
@@ -198,22 +243,39 @@
                     <div>{{ ticket.createdAt ? ticket.createdAt|date('d/m/Y H:i') : '-' }}</div>
                 </div>
                 <div class="table-row">
+                    <div><strong>Priorité</strong></div>
+                    <div>
+                        {% set priority = ticket.priority|default('medium') %}
+                        {% if priority == 'immediate' %}
+                            <span class="badge red">Immédiatement</span>
+                        {% elseif priority == 'high' %}
+                            <span class="badge red">Haute</span>
+                        {% elseif priority == 'medium' %}
+                            <span class="badge yellow">Moyenne</span>
+                        {% else %}
+                            <span class="badge gray">{{ priority }}</span>
+                        {% endif %}
+                    </div>
                     <div><strong>Bloqué chez</strong></div>
                     <div>
-                        {% set blocker = null %}
-                        {% for task in ticket.tasks %}
-                            {% if blocker is null and task.status != 'done' %}
-                                {% set blocker = task.assignedTo.username ?? task.assignedTo.email %}
+                        {% if blockerInfo is not null %}
+                            <span class="badge red">{{ blockerInfo.service }}
+                            {% if blockerInfo.user %}
+                                ({{ blockerInfo.user.username }})
+                            {% else %}
+                                (N/A)
                             {% endif %}
-                        {% endfor %}
-                        {% if blocker %}
-                            <span class="badge red">{{ blocker }}</span>
+                            </span>
                         {% else %}
                             <span class="badge green">Aucun blocage</span>
                         {% endif %}
                     </div>
+                </div>
+                <div class="table-row">
                     <div><strong>Clôturé le</strong></div>
                     <div>{{ ticket.closedAt ? ticket.closedAt|date('d/m/Y H:i') : '-' }}</div>
+                    <div></div>
+                    <div></div>
                 </div>
             </div>
         </div>
@@ -229,14 +291,39 @@
                         <div>Site</div>
                         <div>Type Trans</div>
                         <div>Service</div>
-                        <div>Info</div>
+                        <div>État / Statut</div>
                     </div>
                     {% for ticketSite in ticket.ticketSites %}
+                        {% set siteName = ticketSite.siteName %}
+                        {% set site = siteDetails[siteName] ?? null %}
                         <div class="table-row">
-                            <div><strong>{{ ticketSite.siteName }}</strong></div>
+                            <div><strong>{{ siteName }}</strong></div>
                             <div>{{ ticketSite.typeTrans ?: '-' }}</div>
                             <div>{{ ticketSite.serviceName ?: '-' }}</div>
-                            <div>-</div>
+                            <div>
+                                {% if site %}
+                                    {% set siteStatus = site.siteStatus|default('INCONNU') %}
+                                    {% set status = site.status|default('OK') %}
+                                    <span class="badge 
+                                        {% if siteStatus == 'CRITIQUE' %}red
+                                        {% elseif siteStatus == 'SOUS_OBSERVATION' %}yellow
+                                        {% elseif siteStatus == 'SECURISE' %}green
+                                        {% else %}gray{% endif %}
+                                    ">
+                                        {{ siteStatus ?: 'Inconnu' }}
+                                    </span>
+                                    <span class="badge 
+                                        {% if status == 'CONGESTION' or status == 'CONGESTION(FDD)' or status == 'CONGESTION(TDD)' %}red
+                                        {% elseif status == 'BRIDAGE' %}yellow
+                                        {% elseif status == 'A_VERIFIER_CAPACITE' %}blue
+                                        {% else %}gray{% endif %}
+                                    ">
+                                        {{ status ?: 'OK' }}
+                                    </span>
+                                {% else %}
+                                    <span class="badge gray">Non disponible</span>
+                                {% endif %}
+                            </div>
                         </div>
                     {% endfor %}
                 </div>
@@ -254,7 +341,7 @@
                         <div>Utilisateur</div>
                         <div>Service / Département</div>
                         <div>Statut</div>
-                        <div>Preuve</div>
+                        <div>Preuve / Commentaire</div>
                     </div>
                     {% for task in ticket.tasks %}
                         <div class="table-row">
@@ -272,7 +359,7 @@
                                     <span class="badge mauve">En attente</span>
                                 {% elseif task.status == 'in_progress' %}
                                     <span class="badge blue">En cours</span>
-                                {% elseif task.status == 'done' %}
+                                {% elseif task.status == 'done' or task.status == 'completed' %}
                                     <span class="badge green">Terminée</span>
                                 {% elseif task.status == 'blocked' %}
                                     <span class="badge red">Bloquée</span>
@@ -299,7 +386,7 @@
             {% endif %}
         </div>
 
-        {# ===== Commentaires (corrigé définitif) ===== #}
+        {# ===== Commentaires ===== #}
         <div class="workflow-card">
             <h3>Commentaires</h3>
             {% if ticket.comments is empty %}
@@ -338,6 +425,16 @@
                     {% endfor %}
                 </div>
             {% endif %}
+
+            {# Formulaire d'ajout de commentaire #}
+<form method="post" action="{{ path('superuser_workflow_comment', {id: ticket.id}) }}" enctype="multipart/form-data" class="mt-4">                <div class="mb-2">
+                    <textarea name="message" rows="2" class="w-full border rounded p-2 text-sm" placeholder="Ajouter un commentaire..."></textarea>
+                </div>
+                <div class="mb-2">
+                    <input type="file" name="filePath" class="text-sm">
+                </div>
+                <button type="submit" class="btn btn-primary">Ajouter commentaire</button>
+            </form>
         </div>
 
         {# ===== Historique ===== #}

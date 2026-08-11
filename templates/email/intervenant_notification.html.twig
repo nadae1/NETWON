@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Intervention requise</title>
+</head>
+<body style="font-family: Arial, sans-serif; background: #f4f6f9; padding: 20px;">
+    <div style="max-width: 600px; margin: auto; background: #fff; border-radius: 12px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <h2 style="color: #0b1a33;">Intervention requise</h2>
+        <p>Bonjour,</p>
+        <p>Une intervention est requise pour le ticket <strong>#{{ ticket.id }} – {{ ticket.title }}</strong>.</p>
+        <p><strong>État du site :</strong> {{ site_etat }}</p>
+        <p><strong>Action proposée :</strong> {{ action_proposee }}</p>
+        <p>Merci de prendre les mesures nécessaires.</p>
+        <hr style="border: 1px solid #eef2f6;">
+        <p style="font-size: 0.8rem; color: #6b7a8e;">
+            Cet email vous a été envoyé par l'utilisateur {{ task.assignedTo.username|default('') }} depuis la plateforme Workflow.
+        </p>
+    </div>
+</body>
+</html>

@@ -64,30 +64,127 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         });
     }
 
+    public function isControllerManagedUser(User $user): bool
+    {
+        $roles = $user->getRoles();
 
+        return in_array('ROLE_USER', $roles, true)
+            && !in_array('ROLE_ADMIN', $roles, true)
+            && !in_array('ROLE_SUPERUSER', $roles, true)
+            && !in_array('ROLE_CONTROLLER', $roles, true);
+    }
 
-    //    /**
-    //     * @return User[] Returns an array of User objects
-    //     */
-    //    public function findByExampleField($value): array
-    //    {
-    //        return $this->createQueryBuilder('u')
-    //            ->andWhere('u.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->orderBy('u.id', 'ASC')
-    //            ->setMaxResults(10)
-    //            ->getQuery()
-    //            ->getResult()
-    //        ;
-    //    }
+    /**
+     * @return User[]
+     */
+    public function findControllerManagedUsers(): array
+    {
+        $users = array_filter($this->findAll(), fn (User $user) => $this->isControllerManagedUser($user));
 
-    //    public function findOneBySomeField($value): ?User
-    //    {
-    //        return $this->createQueryBuilder('u')
-    //            ->andWhere('u.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
+        usort($users, static function (User $left, User $right): int {
+            return strcmp((string) $left->getUsername(), (string) $right->getUsername());
+        });
+
+        return array_values($users);
+    }
+
+    public function findControllerManagedUserById(int $id): ?User
+    {
+        $user = $this->find($id);
+
+        if (!$user instanceof User) {
+            return null;
+        }
+
+        return $this->isControllerManagedUser($user) ? $user : null;
+    }
+
+    public function findDuplicateUsernameOrEmail(string $username, ?string $email, ?int $excludeId = null): array
+    {
+        $duplicates = [];
+
+        $existingUsername = $this->findOneBy(['username' => $username]);
+        if ($existingUsername instanceof User && $existingUsername->getId() !== $excludeId) {
+            $duplicates['username'] = $existingUsername;
+        }
+
+        if ($email !== null && $email !== '') {
+            $existingEmail = $this->findOneBy(['email' => $email]);
+            if ($existingEmail instanceof User && $existingEmail->getId() !== $excludeId) {
+                $duplicates['email'] = $existingEmail;
+            }
+        }
+
+        return $duplicates;
+    }
+
+    /**
+     * ✅ CORRIGÉ : la colonne 'roles' est stockée en PostgreSQL comme
+     * type 'json' (Doctrine type: 'json'). PostgreSQL interdit
+     * l'opérateur LIKE (~~) directement sur du json sans cast explicite
+     * -- d'où l'erreur "l'opérateur n'existe pas : json ~~ unknown".
+     * DQL ne sachant pas caster proprement une colonne json vers text
+     * de façon portable, on passe par du SQL natif avec ::text (même
+     * pattern que CheckObservationCommand.php / CheckSupervisionCommand.php
+     * dans ce projet), puis on hydrate les entités User via Doctrine.
+     *
+     * @return User[]
+     */
+    public function findUsersByRole(string $role): array
+    {
+        $ids = $this->fetchUserIdsMatchingRoleSql($role);
+        return $this->hydrateByIds($ids);
+    }
+
+    /**
+     * ✅ CORRIGÉ : même bug que findUsersByRole() (LIKE sur colonne json).
+     *
+     * @return User[]
+     */
+    public function findUsersByRoleAndService(string $role, string $service): array
+    {
+        $ids = $this->fetchUserIdsMatchingRoleSql($role, $service);
+        return $this->hydrateByIds($ids);
+    }
+
+    /**
+     * Exécute la recherche par rôle (et service optionnel) en SQL natif,
+     * avec un cast roles::text explicite, et retourne les IDs correspondants.
+     */
+    private function fetchUserIdsMatchingRoleSql(string $role, ?string $service = null): array
+    {
+        $conn = $this->getEntityManager()->getConnection();
+
+        $sql = 'SELECT id FROM "user" WHERE roles::text LIKE :role';
+        $params = ['role' => '%"' . $role . '"%'];
+
+        if ($service !== null) {
+            $sql .= ' AND service = :service';
+            $params['service'] = $service;
+        }
+
+        return $conn->fetchFirstColumn($sql, $params);
+    }
+
+    /**
+     * Hydrate une liste d'entités User à partir de leurs IDs, en
+     * conservant l'ordre alphabétique par username pour un affichage
+     * stable (les autres méthodes du repository trient de la même façon).
+     *
+     * @param array<int|string> $ids
+     * @return User[]
+     */
+    private function hydrateByIds(array $ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+
+        return $this->createQueryBuilder('u')
+            ->where('u.id IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->orderBy('u.username', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
 }

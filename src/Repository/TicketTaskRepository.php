@@ -56,6 +56,23 @@ class TicketTaskRepository extends ServiceEntityRepository
             ->getQuery()->getResult();
     }
 
+    public function findOverdueTasks(): array
+    {
+        return $this->createQueryBuilder('tt')
+            ->join('tt.ticket', 't')->addSelect('t')
+            ->leftJoin('tt.assignedTo', 'u')->addSelect('u')
+            ->andWhere('tt.status NOT IN (:finalStatuses)')
+            ->andWhere('tt.assignedTo IS NOT NULL')
+            ->andWhere('(t.deadlineAt < :now OR t.deadline < :now)')
+            ->andWhere('t.status NOT IN (:statuses)')
+            ->setParameter('finalStatuses', [TicketTask::STATUS_DONE, TicketTask::STATUS_COMPLETED])
+            ->setParameter('now', new \DateTime())
+            ->setParameter('statuses', ['completed', 'closed'])
+            ->orderBy('t.deadlineAt', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
     public function findDistinctServices(): array
     {
         $rows = $this->createQueryBuilder('tt')

@@ -6,76 +6,728 @@
     <title>NetWON Dashboard</title>
     <link rel="stylesheet" href="{{ asset('assets/css/dashboard.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/workflow.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/dashboard-global.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* === Flash messages === */
+        .dashboard-flashes {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 16px 24px 0;
+        }
+        .flash-success, .flash-error, .flash-warning, .flash-info {
+            border-radius: 14px;
+            padding: 12px 16px;
+            margin-bottom: 10px;
+            font-weight: 600;
+            border: 1px solid transparent;
+        }
+        .flash-success { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+        .flash-error { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+        .flash-warning { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+        .flash-info { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+
+        /* === Controller sidebar === */
+        .controller-shell {
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 0 24px 24px;
+        }
+        .controller-sidebar {
+            width: 280px;
+            flex: 0 0 280px;
+            border-radius: 24px;
+            background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.15);
+            padding: 22px 18px;
+            position: sticky;
+            top: 16px;
+        }
+        .controller-sidebar__title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #fff;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            margin-bottom: 18px;
+        }
+        .controller-sidebar__title img {
+            width: 42px;
+            height: 42px;
+            object-fit: cover;
+            border-radius: 12px;
+        }
+        .controller-sidebar__section {
+            color: rgba(226, 232, 240, 0.65);
+            text-transform: uppercase;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            margin: 18px 0 8px;
+            padding-left: 8px;
+        }
+        .controller-nav-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            color: #e2e8f0;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+            margin-bottom: 6px;
+        }
+        .controller-nav-link:hover,
+        .controller-nav-link.active {
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+            transform: translateX(2px);
+        }
+        .controller-nav-link--child {
+            margin-left: 14px;
+            font-size: 14px;
+            padding-left: 18px;
+        }
+        .controller-main { flex: 1; min-width: 0; }
+        .controller-topbar-note { color: #334155; font-size: 14px; font-weight: 600; margin-top: 8px; }
+        .controller-role-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.12);
+            color: #1d4ed8;
+            font-size: 12px;
+            font-weight: 700;
+            margin-left: 14px;
+        }
+
+        /* === NetBot icon === */
+        .nav-link-netbot {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .nav-link-netbot .netbot-icon {
+            width: 22px;
+            height: 22px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, #ff7900, #ffa733);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        .nav-link-netbot.active .netbot-icon,
+        .nav-link-netbot:hover .netbot-icon {
+            box-shadow: 0 0 0 2px rgba(255, 121, 0, 0.35);
+        }
+
+        /* ===== TOPBAR ===== */
+        .topbar {
+            background: rgba(255, 255, 255, 0.98);
+            border-bottom: 1px solid #e2e8f0;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+            padding: 20px 80px;
+        }
+        .topbar-inner {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 8px 0;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+        }
+
+        .brand-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .user-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: #f1f5f9;
+            color: #1e293b;
+            font-weight: 600;
+            font-size: 0.85rem;
+            border: 1px solid #e2e8f0;
+            flex-shrink: 0;
+        }
+        .user-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #22c55e;
+        }
+
+        .navbar-menu {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            gap: 2px;
+            flex-wrap: nowrap;
+            flex: 1;
+            min-width: 0;
+        }
+        .navbar-menu .nav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 1rem;
+            color: #334155;
+            text-decoration: none;
+            transition: background 0.15s ease;
+        }
+        .navbar-menu .nav-link:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+        .navbar-menu .nav-link.active {
+            background: #f1f5f9;
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .logout-link {
+            background: #0f172a !important;
+            color: #fff !important;
+            border-radius: 8px;
+            padding: 6px 14px !important;
+        }
+        .logout-link:hover {
+            background: #1e293b !important;
+            color: #fff !important;
+        }
+
+        @media (max-width: 1024px) {
+            .topbar-inner {
+                overflow-x: auto;
+                padding: 8px 0;
+            }
+        }
+        @media (max-width: 700px) {
+            .topbar-inner {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            .navbar-menu {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
 </head>
 <body>
 {% set currentRoute = app.request.attributes.get('_route') %}
+{% set isControllerArea = is_granted('ROLE_CONTROLLER') and not is_granted('ROLE_ADMIN') and not is_granted('ROLE_SUPERUSER') and not is_granted('ROLE_USER') %}
 
 <div class="dashboard-page">
     <header class="topbar">
         <div class="topbar-inner">
-            <div class="brand-row">
-                <div class="brand-left">
-                    <img src="{{ asset('images/logo-won.jpeg') }}" alt="NetWON" class="brand-logo">
+            <img src="{{ asset('images/logo-won.jpeg') }}" alt="NetWON" class="brand-logo">
+
+            {% if not isControllerArea %}
+                <nav class="navbar-menu">
+                    {# === ADMIN : pas de notifications, volontairement === #}
+                    {% if is_granted('ROLE_ADMIN') %}
+                        <a class="nav-link {{ currentRoute == 'admin_dashboard_home' ? 'active' : '' }}" href="{{ path('admin_dashboard_home') }}">Home</a>
+                        <a class="nav-link {{ currentRoute == 'admin_dashboard_kpis' ? 'active' : '' }}" href="{{ path('admin_dashboard_kpis') }}">KPIs</a>
+                        <a class="nav-link {{ currentRoute == 'admin_dashboard_sites' ? 'active' : '' }}" href="{{ path('admin_dashboard_sites') }}">Sites</a>
+                        <a class="nav-link {{ currentRoute starts with 'admin_workflow_' ? 'active' : '' }}" href="{{ path('admin_workflow_index') }}">Workflow</a>
+                        <a class="nav-link nav-link-netbot {{ currentRoute starts with 'admin_chatbot' ? 'active' : '' }}" href="{{ path('admin_chatbot_index') }}" title="NetBot">
+                            <span class="netbot-icon">🤖</span>
+                            <span>NetBot</span>
+                        </a>
+
+                    {# === SUPERUSER : notifications ajoutées === #}
+                    {% elseif is_granted('ROLE_SUPERUSER') %}
+                        <a class="nav-link {{ currentRoute == 'superuser_dashboard_home' ? 'active' : '' }}" href="{{ path('superuser_dashboard_home') }}">Home</a>
+                        <a class="nav-link {{ currentRoute == 'superuser_dashboard_import' ? 'active' : '' }}" href="{{ path('superuser_dashboard_import') }}">Import</a>
+                        <a class="nav-link {{ currentRoute == 'superuser_dashboard_export' ? 'active' : '' }}" href="{{ path('superuser_dashboard_export') }}">Export</a>
+                        <a class="nav-link {{ currentRoute == 'superuser_dashboard_kpis' ? 'active' : '' }}" href="{{ path('superuser_dashboard_kpis') }}">KPIs</a>
+                        <a class="nav-link {{ currentRoute == 'superuser_dashboard_sites' ? 'active' : '' }}" href="{{ path('superuser_dashboard_sites') }}">Sites</a>
+                        <a class="nav-link {{ currentRoute == 'superuser_dashboard_alerts' ? 'active' : '' }}" href="{{ path('superuser_dashboard_alerts') }}">Alerts</a>
+                        <a class="nav-link {{ currentRoute starts with 'superuser_ia_' ? 'active' : '' }}" href="{{ path('superuser_ia_dashboard') }}">🧠 IA Prédictions</a>
+                        <a class="nav-link {{ currentRoute starts with 'superuser_workflow_' ? 'active' : '' }}" href="{{ path('superuser_workflow_index') }}">Workflow</a>
+
+                        {% set unread = unread_notifications_count() %}
+                        <a class="nav-link {{ currentRoute starts with 'dashboard_notifications' ? 'active' : '' }}" href="{{ path('dashboard_notifications') }}">
+                            Notifications
+                            {% if unread > 0 %}
+                                <span class="badge red nav-badge">{{ unread }}</span>
+                            {% endif %}
+                        </a>
+
+                    {# === USER : notifications conservées === #}
+                    {% elseif is_granted('ROLE_USER') %}
+                        <a class="nav-link {{ currentRoute == 'user_dashboard_home' ? 'active' : '' }}" href="{{ path('user_dashboard_home') }}">Home</a>
+                        <a class="nav-link {{ currentRoute == 'dashboard_import' ? 'active' : '' }}" href="{{ path('dashboard_import') }}">Import</a>
+                        <a class="nav-link {{ currentRoute == 'dashboard_export' ? 'active' : '' }}" href="{{ path('dashboard_export') }}">Export</a>
+                        <a class="nav-link {{ currentRoute == 'dashboard_kpis' ? 'active' : '' }}" href="{{ path('dashboard_kpis') }}">KPIs</a>
+                        <a class="nav-link {{ currentRoute == 'user_dashboard_sites' ? 'active' : '' }}" href="{{ path('user_dashboard_sites') }}">Sites</a>
+                        <a class="nav-link {{ currentRoute == 'user_dashboard_alerts' ? 'active' : '' }}" href="{{ path('user_dashboard_alerts') }}">Alerts</a>
+                        <a class="nav-link {{ currentRoute starts with 'dashboard_workflow' ? 'active' : '' }}" href="{{ path('dashboard_workflow') }}">Workflow</a>
+
+                        {% set unread = unread_notifications_count() %}
+                        <a class="nav-link {{ currentRoute starts with 'dashboard_notifications' ? 'active' : '' }}" href="{{ path('dashboard_notifications') }}">
+                            Notifications
+                            {% if unread > 0 %}
+                                <span class="badge red nav-badge">{{ unread }}</span>
+                            {% endif %}
+                        </a>
+                    {% endif %}
+                </nav>
+
+                <div class="topbar-right">
+                    <span class="user-badge">
+                        <span class="user-dot"></span>
+                        <span>{{ app.user ? app.user.userIdentifier : 'Utilisateur' }}</span>
+                    </span>
+                    <a class="nav-link logout-link" href="{{ path('app_logout') }}">Logout</a>
                 </div>
-
-                <div class="user-badge">
-                    <span class="user-dot"></span>
-                    <span>{{ app.user ? app.user.userIdentifier : 'Utilisateur' }}</span>
-                </div>
-            </div>
-
-            <nav class="navbar-menu">
-                <div class="brand-left">
-                    <img src="{{ asset('images/logo-won.jpeg') }}" alt="NetWON" class="brand-logo">
-                </div>
-
-                {% if is_granted('ROLE_ADMIN') %}
-                    <a class="nav-link {{ currentRoute == 'admin_dashboard_home' ? 'active' : '' }}" href="{{ path('admin_dashboard_home') }}">Home</a>
-                    <a class="nav-link {{ currentRoute == 'admin_dashboard_export' ? 'active' : '' }}" href="{{ path('admin_dashboard_export') }}">Export</a>
-                    <a class="nav-link {{ currentRoute == 'admin_dashboard_kpis' ? 'active' : '' }}" href="{{ path('admin_dashboard_kpis') }}">KPIs</a>
-                    <a class="nav-link {{ currentRoute == 'admin_dashboard_sites' ? 'active' : '' }}" href="{{ path('admin_dashboard_sites') }}">Sites</a>
-                    <a class="nav-link {{ currentRoute starts with 'admin_workflow_' ? 'active' : '' }}" href="{{ path('admin_workflow_index') }}">Workflow</a>
-
-                {% elseif is_granted('ROLE_SUPERUSER') %}
-                    <a class="nav-link {{ currentRoute == 'superuser_dashboard_home' ? 'active' : '' }}" href="{{ path('superuser_dashboard_home') }}">Home</a>
-                    <a class="nav-link {{ currentRoute == 'superuser_dashboard_import' ? 'active' : '' }}" href="{{ path('superuser_dashboard_import') }}">Import</a>
-                    <a class="nav-link {{ currentRoute == 'superuser_dashboard_export' ? 'active' : '' }}" href="{{ path('superuser_dashboard_export') }}">Export</a>
-                    <a class="nav-link {{ currentRoute == 'superuser_dashboard_kpis' ? 'active' : '' }}" href="{{ path('superuser_dashboard_kpis') }}">KPIs</a>
-                    <a class="nav-link {{ currentRoute == 'superuser_dashboard_sites' ? 'active' : '' }}" href="{{ path('superuser_dashboard_sites') }}">Sites</a>
-                    <a class="nav-link {{ currentRoute == 'superuser_dashboard_alerts' ? 'active' : '' }}" href="{{ path('superuser_dashboard_alerts') }}">Alerts</a>
-                    <a class="nav-link {{ currentRoute starts with 'superuser_workflow_' ? 'active' : '' }}" href="{{ path('superuser_workflow_index') }}">Workflow</a>
-
-               {% elseif is_granted('ROLE_USER') %}
-    <a class="nav-link {{ currentRoute == 'user_dashboard_home' ? 'active' : '' }}" href="{{ path('user_dashboard_home') }}">Home</a>
-    <a class="nav-link {{ currentRoute == 'dashboard_import' ? 'active' : '' }}" href="{{ path('dashboard_import') }}">Import</a>
-    <a class="nav-link {{ currentRoute == 'dashboard_export' ? 'active' : '' }}" href="{{ path('dashboard_export') }}">Export</a>
-    <a class="nav-link {{ currentRoute == 'dashboard_kpis' ? 'active' : '' }}" href="{{ path('dashboard_kpis') }}">KPIs</a>
-    <a class="nav-link {{ currentRoute == 'user_dashboard_sites' ? 'active' : '' }}" href="{{ path('user_dashboard_sites') }}">Sites</a>
-    <a class="nav-link {{ currentRoute == 'user_dashboard_alerts' ? 'active' : '' }}" href="{{ path('user_dashboard_alerts') }}">Alerts</a>
-    <a class="nav-link {{ currentRoute starts with 'dashboard_workflow' ? 'active' : '' }}" href="{{ path('dashboard_workflow') }}">Workflow</a>
-{% endif %}
-
-                
-
-                {% if is_granted('ROLE_USER') %}
-                    {% set unread = unread_notifications_count() %}
-                    <a class="nav-link {{ currentRoute starts with 'dashboard_notifications' ? 'active' : '' }}" href="{{ path('dashboard_notifications') }}">
-                        Notifications
-                        {% if unread > 0 %}
-                            <span class="badge red" style="margin-left:6px;">{{ unread }}</span>
-                        {% endif %}
-                    </a>
-                {% endif %}
-
-                <a class="nav-link logout-link" href="{{ path('app_logout') }}">Logout</a>
-            </nav>
+            {% endif %}
         </div>
+
+        {% if isControllerArea %}
+            <div class="controller-topbar-note">Espace de gestion des comptes utilisateurs</div>
+            <div style="margin-top: 10px;">
+                <a class="nav-link logout-link" href="{{ path('app_logout') }}">Logout</a>
+            </div>
+        {% endif %}
     </header>
 
-    <main class="content-wrap">
-        {% block dashboard_content %}{% endblock %}
-    </main>
+    {% if isControllerArea %}
+        <div class="controller-shell">
+            <aside class="controller-sidebar">
+                <div class="controller-sidebar__title">
+                    <img src="{{ asset('images/logo-won.jpeg') }}" alt="NetWON">
+                    <div>
+                        <div>Controller</div>
+                        <small style="color: rgba(226, 232, 240, 0.7); font-weight: 600;">ROLE_CONTROLLER</small>
+                    </div>
+                </div>
+
+                <div class="controller-sidebar__section">Dashboard</div>
+                <a href="{{ path('controller_dashboard_home') }}" class="controller-nav-link {{ currentRoute == 'controller_dashboard_home' ? 'active' : '' }}">
+                    <i class="fa-solid fa-gauge"></i>
+                    <span>Dashboard</span>
+                </a>
+
+                <div class="controller-sidebar__section">Users</div>
+                <a href="{{ path('controller_users') }}" class="controller-nav-link {{ currentRoute == 'controller_users' or currentRoute starts with 'controller_user_' ? 'active' : '' }}">
+                    <i class="fa-solid fa-users"></i>
+                    <span>Liste</span>
+                </a>
+                <a href="{{ path('controller_user_new') }}" class="controller-nav-link controller-nav-link--child {{ currentRoute == 'controller_user_new' ? 'active' : '' }}">
+                    <i class="fa-solid fa-user-plus"></i>
+                    <span>Créer</span>
+                </a>
+
+                <div class="controller-sidebar__section">Logs</div>
+                <a href="{{ path('controller_logs') }}" class="controller-nav-link {{ currentRoute == 'controller_logs' ? 'active' : '' }}">
+                    <i class="fa-solid fa-file-lines"></i>
+                    <span>Logs</span>
+                </a>
+            </aside>
+
+            <main class="controller-main content-wrap">
+                <div class="dashboard-flashes">
+                    {% for message in app.flashes('success') %}
+                        <div class="flash-success">{{ message }}</div>
+                    {% endfor %}
+                    {% for message in app.flashes('error') %}
+                        <div class="flash-error">{{ message }}</div>
+                    {% endfor %}
+                    {% for message in app.flashes('warning') %}
+                        <div class="flash-warning">{{ message }}</div>
+                    {% endfor %}
+                    {% for message in app.flashes('info') %}
+                        <div class="flash-info">{{ message }}</div>
+                    {% endfor %}
+                </div>
+
+                {{ block('dashboard_content') }}
+            </main>
+        </div>
+    {% else %}
+        <main class="content-wrap">
+            <div class="dashboard-flashes">
+                {% for message in app.flashes('success') %}
+                    <div class="flash-success">{{ message }}</div>
+                {% endfor %}
+                {% for message in app.flashes('error') %}
+                    <div class="flash-error">{{ message }}</div>
+                {% endfor %}
+                {% for message in app.flashes('warning') %}
+                    <div class="flash-warning">{{ message }}</div>
+                {% endfor %}
+                {% for message in app.flashes('info') %}
+                    <div class="flash-info">{{ message }}</div>
+                {% endfor %}
+            </div>
+
+            {% block dashboard_content %}{% endblock %}
+        </main>
+    {% endif %}
 </div>
+
+{% if is_granted('ROLE_SUPERUSER') %}
+<div id="capacity-popup" class="capacity-popup-overlay" style="display:none;">
+    <div class="capacity-popup capacity-popup--wide">
+        <button type="button" id="cp-close" class="capacity-popup-close" title="Fermer">&times;</button>
+        <h3>⚠️ Sites à compléter (<span id="cp-total-count">0</span>)</h3>
+        <p>Capacité et/ou type de liaison manquants. Cochez les sites à reporter, ou complétez-les un par un.</p>
+
+        <div class="cp-bulk-bar">
+            <label class="cp-checkbox-label">
+                <input type="checkbox" id="cp-select-all">
+                Tout sélectionner
+            </label>
+            <div class="cp-bulk-remind">
+                <label for="cp-bulk-date">Reporter jusqu'au :</label>
+                <input type="date" id="cp-bulk-date">
+                <button type="button" id="cp-bulk-remind-btn" class="btn-secondary">Reporter la sélection</button>
+            </div>
+        </div>
+
+        <div id="cp-error" class="capacity-popup-error" style="display:none;"></div>
+
+        <div class="cp-list" id="cp-list"></div>
+
+        <div class="capacity-popup-actions">
+            <span id="cp-selected-count">0 site(s) sélectionné(s)</span>
+            <button type="button" id="cp-close-bottom" class="btn-secondary">Fermer</button>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    let allSites = [];
+
+    const overlay = document.getElementById('capacity-popup');
+    const listEl = document.getElementById('cp-list');
+    const errorBox = document.getElementById('cp-error');
+    const selectAllCb = document.getElementById('cp-select-all');
+    const bulkDateInput = document.getElementById('cp-bulk-date');
+    const selectedCountEl = document.getElementById('cp-selected-count');
+    const totalCountEl = document.getElementById('cp-total-count');
+
+    const defaultReminder = new Date();
+    defaultReminder.setDate(defaultReminder.getDate() + 7);
+    bulkDateInput.value = defaultReminder.toISOString().slice(0, 10);
+
+    function showError(message) {
+        errorBox.textContent = message;
+        errorBox.style.display = 'block';
+    }
+    function clearError() {
+        errorBox.style.display = 'none';
+        errorBox.textContent = '';
+    }
+
+    function getSelectedIds() {
+        return Array.from(listEl.querySelectorAll('.cp-row-checkbox:checked'))
+            .map(function (cb) { return parseInt(cb.dataset.id, 10); });
+    }
+
+    function updateSelectedCount() {
+        const n = getSelectedIds().length;
+        selectedCountEl.textContent = n + ' site(s) sélectionné(s)';
+        selectAllCb.checked = n > 0 && n === allSites.length;
+    }
+
+    function renderList() {
+        totalCountEl.textContent = allSites.length;
+        if (!allSites.length) {
+            overlay.style.display = 'none';
+            return;
+        }
+        listEl.innerHTML = '';
+        allSites.forEach(function (site) {
+            const row = document.createElement('div');
+            row.className = 'cp-row';
+            row.innerHTML = `
+                <div class="cp-row-select">
+                    <input type="checkbox" class="cp-row-checkbox" data-id="${site.id}">
+                </div>
+                <div class="cp-row-name">
+                    <strong>${site.siteName}</strong>
+                    <small>${site.classification || ''}</small>
+                </div>
+                <div class="cp-row-field">
+                    <label>TDD (Mbps)</label>
+                    <input type="number" step="0.01" min="0" class="cp-input-tdd" value="${site.capaciteTddMbps ?? ''}">
+                </div>
+                <div class="cp-row-field">
+                    <label>FDD (Mbps)</label>
+                    <input type="number" step="0.01" min="0" class="cp-input-fdd" value="${site.capaciteFddMbps ?? ''}">
+                </div>
+                <div class="cp-row-field">
+                    <label>Type</label>
+                    <input type="text" class="cp-input-type" placeholder="FO / FH / BACKBONE" value="${site.typeTrans ?? ''}">
+                </div>
+                <div class="cp-row-actions">
+                    <button type="button" class="cp-row-save btn-primary" data-id="${site.id}">Enregistrer</button>
+                </div>
+            `;
+            listEl.appendChild(row);
+
+            row.querySelector('.cp-row-save').addEventListener('click', function () {
+                saveSite(site.id, row);
+            });
+            row.querySelector('.cp-row-checkbox').addEventListener('change', updateSelectedCount);
+        });
+        overlay.style.display = 'flex';
+        updateSelectedCount();
+    }
+
+    function removeSiteFromList(id) {
+        allSites = allSites.filter(function (s) { return s.id !== id; });
+        renderList();
+    }
+
+    function saveSite(id, row) {
+        clearError();
+        const body = {
+            capaciteTddMbps: row.querySelector('.cp-input-tdd').value,
+            capaciteFddMbps: row.querySelector('.cp-input-fdd').value,
+            typeTrans: row.querySelector('.cp-input-type').value
+        };
+        fetch(`/superuser/sites-completion/${id}/update`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (res.status === 'error') {
+                    showError(res.message || 'Erreur lors de l’enregistrement.');
+                    return;
+                }
+                removeSiteFromList(id);
+            })
+            .catch(function (err) {
+                showError('Erreur réseau lors de l’enregistrement.');
+                console.error(err);
+            });
+    }
+
+    selectAllCb.addEventListener('change', function () {
+        listEl.querySelectorAll('.cp-row-checkbox').forEach(function (cb) {
+            cb.checked = selectAllCb.checked;
+        });
+        updateSelectedCount();
+    });
+
+    document.getElementById('cp-bulk-remind-btn').addEventListener('click', function () {
+        clearError();
+        const ids = getSelectedIds();
+        if (!ids.length) {
+            showError('Sélectionnez au moins un site à reporter.');
+            return;
+        }
+        const remindUntil = bulkDateInput.value;
+        fetch("{{ path('superuser_sites_bulk_remind') }}", {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ siteIds: ids, remindUntil: remindUntil })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (res.status === 'error') {
+                    showError(res.message || 'Erreur lors du report.');
+                    return;
+                }
+                allSites = allSites.filter(function (s) { return ids.indexOf(s.id) === -1; });
+                renderList();
+            })
+            .catch(function (err) {
+                showError('Erreur réseau lors du report.');
+                console.error(err);
+            });
+    });
+
+    function closePopup() {
+        overlay.style.display = 'none';
+    }
+    document.getElementById('cp-close').addEventListener('click', closePopup);
+    document.getElementById('cp-close-bottom').addEventListener('click', closePopup);
+
+    fetch("{{ path('superuser_sites_incomplete') }}", { credentials: 'same-origin' })
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function (sites) {
+            allSites = Array.isArray(sites) ? sites : [];
+            renderList();
+        })
+        .catch(function (err) {
+            console.error('Impossible de charger les sites à compléter :', err);
+        });
+});
+</script>
+
+<style>
+.capacity-popup-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15,23,42,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 24px;
+}
+.capacity-popup {
+    position: relative;
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    width: 360px;
+    max-width: 92vw;
+}
+.capacity-popup--wide {
+    width: 760px;
+    max-width: 95vw;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+.capacity-popup-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    border: none;
+    background: transparent;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    color: #64748b;
+}
+.capacity-popup-close:hover { color: #1e293b; }
+
+.cp-bulk-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 10px;
+    margin: 12px 0;
+}
+.cp-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.cp-bulk-remind {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+.cp-bulk-remind input[type="date"] {
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+}
+
+.cp-list {
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-right: 4px;
+}
+.cp-row {
+    display: grid;
+    grid-template-columns: 32px 1.4fr 1fr 1fr 1.2fr auto;
+    gap: 10px;
+    align-items: end;
+    padding: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+.cp-row-select { display: flex; align-items: center; height: 100%; }
+.cp-row-name { display: flex; flex-direction: column; }
+.cp-row-name small { color: #64748b; }
+.cp-row-field label { display: block; font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 2px; }
+.cp-row-field input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+.cp-row-save {
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.capacity-popup-error {
+    margin-top: 4px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #fef2f2;
+    color: #991b1b;
+    font-size: 13px;
+    font-weight: 600;
+}
+.capacity-popup-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 13px;
+    color: #64748b;
+}
+.capacity-popup-actions button {
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+}
+</style>
+{% endif %}
 </body>
 </html>

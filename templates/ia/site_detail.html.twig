@@ -1,0 +1,175 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+.dashboard-home-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; }
+.dashboard-home-actions { display: flex; align-items: center; gap: 10px; }
+.dashboard-home-actions .btn-secondary {
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    text-decoration: none;
+}
+</style>
+
+<div class="dashboard-home dashboard-home--superuser">
+    <div class="dashboard-home-toolbar">
+        <div>
+            <a href="{{ path('superuser_ia_dashboard', {horizon: horizon}) }}" style="color:#64748b; font-size:13px; text-decoration:none;">← Retour au dashboard IA</a>
+            <h2 style="margin:8px 0 4px; font-size:20px; font-weight:800; color:#0f172a;">📡 {{ site }}</h2>
+        </div>
+        <div class="dashboard-home-actions">
+            <a href="{{ path('superuser_ia_site_export_pdf', {site: site, horizon: horizon}) }}" class="btn-secondary">📥 Exporter (PDF)</a>
+        </div>
+    </div>
+
+    <div class="service-tabs">
+        <a href="{{ path('superuser_ia_site_detail', {site: site, horizon: 'h24'}) }}" class="service-tab {{ horizon == 'h24' ? 'active' : '' }}">📅 Prochain jour</a>
+        <a href="{{ path('superuser_ia_site_detail', {site: site, horizon: 'd7'}) }}" class="service-tab {{ horizon == 'd7' ? 'active' : '' }}">📆 7 jours</a>
+        <a href="{{ path('superuser_ia_site_detail', {site: site, horizon: 'd30'}) }}" class="service-tab {{ horizon == 'd30' ? 'active' : '' }}">🗓️ 30 jours</a>
+    </div>
+
+    <div class="charts-grid" style="grid-template-columns: 1.6fr 1fr;">
+        <div class="chart-card">
+            <div class="chart-title">Évolution du trafic — historique réel + projection IA</div>
+            {% if historique_json == '[]' %}
+                <p style="color:#94a3b8; font-size:13px; padding:20px 0;">Aucun historique de trafic brut trouvé pour ce site.</p>
+            {% else %}
+                <div class="chart-box" style="height:340px;">
+                    <canvas id="chartEvolution"></canvas>
+                </div>
+            {% endif %}
+        </div>
+
+        <div>
+            <div class="chart-card" style="margin-bottom:16px;">
+                <div class="chart-title">Résumé de la prédiction</div>
+                {% if prediction %}
+                    {% if prediction.projectionFiable is defined and prediction.projectionFiable == false %}
+                    <div style="background:#fef3c7; border-left:4px solid #f59e0b; padding:10px 14px; border-radius:8px; margin-bottom:12px; font-size:13px; color:#92400e;">
+                        ⚠️ Projection de tendance non disponible pour ce site (historique brut insuffisant sous ce nom). L'état affiché reflète le trafic actuel mesuré, sans extrapolation de croissance.
+                    </div>
+                    {% endif %}
+                    <div class="ia-info-row"><span>Trafic actuel</span><strong>{{ prediction.traficActuelMbps|number_format(1) }} Mbps</strong></div>
+                    <div class="ia-info-row"><span>Trafic projeté</span><strong>{{ prediction.traficProjeteMbps|number_format(1) }} Mbps</strong></div>
+                    <div class="ia-info-row"><span>Capacité</span><strong>{{ prediction.capaciteMbps|number_format(0) }} Mbps</strong></div>
+                    <div class="ia-info-row"><span>Taux projeté = trafic projeté / capacité</span><strong>{{ prediction.tauxUtilisationProjetePct|number_format(1) }} %</strong></div>
+                    <div class="ia-info-row"><span>Croissance estimée = (facteur - 1) × 100</span><strong>{{ (prediction.facteurCroissance * 100 - 100)|number_format(1) }} %</strong></div>
+                    <div class="ia-info-row"><span>État prédit</span><strong>{{ prediction.etatPredit }}</strong></div>
+
+                    <div class="ia-action-box ia-action-{{ prediction.actionPriorite|lower }}">
+                        <div class="ia-action-title">{{ prediction.actionCode }}</div>
+                        <div class="ia-action-desc">{{ prediction.actionDescription }}</div>
+                    </div>
+                {% else %}
+                    <p style="color:#94a3b8; font-size:13px;">Aucune prédiction disponible pour cet horizon.</p>
+                {% endif %}
+            </div>
+
+            {% if snapshot %}
+            <div class="chart-card">
+                <div class="chart-title">Informations site</div>
+                <div class="ia-info-row"><span>Classification</span><strong>{{ snapshot.classification }}</strong></div>
+                <div class="ia-info-row"><span>Type transmission</span><strong>{{ snapshot.typeTrans }}</strong></div>
+                <div class="ia-info-row"><span>Occurrences actuelles</span><strong>{{ snapshot.nombreOccurrences }}</strong></div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+.ia-info-row { display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid #f1f5f9; font-size:13px; color:#475569; }
+.ia-info-row strong { color:#0f172a; white-space:nowrap; }
+
+.ia-action-box { padding:16px; border-radius:12px; margin-top:14px; }
+.ia-action-urgente { background:#fee2e2; border-left:4px solid #dc2626; }
+.ia-action-haute { background:#fef3c7; border-left:4px solid #f59e0b; }
+.ia-action-moyenne { background:#dbeafe; border-left:4px solid #3b82f6; }
+.ia-action-faible { background:#f1f5f9; border-left:4px solid #94a3b8; }
+.ia-action-title { font-weight:800; font-size:14px; margin-bottom:6px; color:#0f172a; }
+.ia-action-desc { font-size:13px; color:#334155; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const historique = {{ historique_json|raw }};
+    {% if prediction %}
+    const predictedPoint = {
+        date: "{{ prediction.datePrediction ? prediction.datePrediction.format('Y-m-d H:i:s') : '' }}",
+        value: {{ prediction.traficProjeteMbps ?? 0 }}
+    };
+    const capacite = {{ prediction.capaciteMbps ?? 0 }};
+    {% else %}
+    const predictedPoint = null;
+    const capacite = 0;
+    {% endif %}
+
+    const chartEl = document.getElementById('chartEvolution');
+    if (chartEl && historique.length > 0) {
+        const labels = historique.map(h => h.date);
+        const values = historique.map(h => h.value);
+
+        const datasets = [{
+            label: 'Trafic réel (Mbps)',
+            data: values,
+            borderColor: '#FF7900',
+            backgroundColor: 'rgba(255,121,0,0.08)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0,
+            borderWidth: 2,
+        }];
+
+        if (predictedPoint) {
+            labels.push(predictedPoint.date + ' (projection)');
+            const predictedSeries = new Array(values.length).fill(null);
+            predictedSeries.push(predictedPoint.value);
+            datasets.push({
+                label: 'Trafic projeté (IA)',
+                data: predictedSeries,
+                borderColor: '#dc2626',
+                backgroundColor: '#dc2626',
+                pointRadius: 7,
+                pointStyle: 'triangle',
+                showLine: false,
+            });
+        }
+
+        if (capacite > 0) {
+            datasets.push({
+                label: 'Capacité (Mbps)',
+                data: new Array(labels.length).fill(capacite),
+                borderColor: '#94a3b8',
+                borderDash: [6, 4],
+                pointRadius: 0,
+                fill: false,
+            });
+        }
+
+        new Chart(chartEl, {
+            type: 'line',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { position: 'bottom' } },
+                scales: {
+                    x: { ticks: { maxTicksLimit: 10, font: { size: 10 } } },
+                    y: { beginAtZero: true, title: { display: true, text: 'Mbps' } }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

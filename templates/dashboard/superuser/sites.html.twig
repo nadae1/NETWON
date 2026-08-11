@@ -2,46 +2,57 @@
 
 {% block dashboard_content %}
 <div class="workflow-page">
-    <div class="page-header">
-        <div>
-            <h2 class="page-title">{{ pageTitle|default('Sites traités') }}</h2>
-            <div class="page-desc">Tous les sites après traitement Python</div>
+    <div class="service-header">
+        <div class="service-tabs">
+            <a href="{{ path('superuser_dashboard_sites') }}" class="service-tab {% if not currentService %}active{% endif %}">Tous</a>
+            <a href="{{ path('superuser_dashboard_sites', {service: 'FO'}) }}" class="service-tab {% if currentService == 'FO' %}active{% endif %}">📡 FO</a>
+            <a href="{{ path('superuser_dashboard_sites', {service: 'FH'}) }}" class="service-tab {% if currentService == 'FH' %}active{% endif %}">📡 FH</a>
+            <a href="{{ path('superuser_dashboard_sites', {service: 'SHARED'}) }}" class="service-tab {% if currentService == 'SHARED' %}active{% endif %}">🔄 SHARED</a>
         </div>
-        <div>
-            <a href="{{ path('superuser_dashboard_import') }}" class="btn-primary">+ Nouvel Import</a>
-            <a href="{{ path('user_data_export_sites') }}" class="btn-secondary" style="margin-left: 10px;">📥 Export</a>
-        </div>
+        <a href="{{ path('superuser_dashboard_sites_export', {
+    service: currentService,
+    classification: currentClassification,
+    status: currentStatus,
+    search: currentSearch
+}) }}" class="btn-export">📥 Exporter</a>
     </div>
 
-    <!-- Service Filter Tabs -->
-    <div class="service-tabs">
-        <a href="{{ path('superuser_dashboard_sites', {}) }}" class="service-tab {% if not currentService %}active{% endif %}">Tous</a>
-        <a href="{{ path('superuser_dashboard_sites', {service: 'FO'}) }}" class="service-tab {% if currentService == 'FO' %}active{% endif %}">📡 FO</a>
-        <a href="{{ path('superuser_dashboard_sites', {service: 'FH'}) }}" class="service-tab {% if currentService == 'FH' %}active{% endif %}">📡 FH</a>
-        <a href="{{ path('superuser_dashboard_sites', {service: 'SHARED'}) }}" class="service-tab {% if currentService == 'SHARED' %}active{% endif %}">🔄 SHARED</a>
-        <a href="{{ path('superuser_dashboard_sites', {service: 'BACKBONE'}) }}" class="service-tab {% if currentService == 'BACKBONE' %}active{% endif %}">🔗 BACKBONE</a>
-    </div>
-
-    <!-- Filters -->
     <div class="card" style="margin-bottom: 20px;">
-        <form method="get" class="filters-form">
-            <input type="hidden" name="service" value="{{ currentService }}">
+        <form method="get" action="{{ path('superuser_dashboard_sites') }}" class="filters-form">
+            {% if currentService %}
+                <input type="hidden" name="service" value="{{ currentService }}">
+            {% endif %}
+
             <div class="filter-group">
                 <label>Classification</label>
                 <select name="classification">
                     <option value="">Toutes</option>
                     {% for class in classifications %}
-                        <option value="{{ class }}" {% if currentClassification == class %}selected{% endif %}>{{ class }}</option>
+                        <option value="{{ class }}" {% if currentClassification == class %}selected{% endif %}>
+                            {{ class }}
+                        </option>
                     {% endfor %}
                 </select>
             </div>
+
+            <div class="filter-group">
+                <label>État / Statut</label>
+                <select name="status">
+                    <option value="">Tous</option>
+                    {% for value, label in statusOptions %}
+                        <option value="{{ value }}" {% if currentStatus == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
             <div class="filter-group">
                 <label>Recherche</label>
                 <input type="text" name="search" value="{{ currentSearch }}" placeholder="Nom du site...">
             </div>
+
             <div class="filter-group">
                 <button type="submit" class="btn-secondary">Filtrer</button>
-                <a href="{{ path('superuser_dashboard_sites', {service: currentService}) }}" class="btn-link">Réinitialiser</a>
+                <a href="{{ currentService ? path('superuser_dashboard_sites', {service: currentService}) : path('superuser_dashboard_sites') }}" class="btn-link">Réinitialiser</a>
             </div>
         </form>
     </div>
@@ -51,51 +62,105 @@
             <table class="workflow-table">
                 <thead>
                     <tr>
-                        <th>Site</th>
-                        <th>Site pairé</th>
-                        <th>Service</th>
-                        <th>Classification</th>
-                        <th>Type Trans</th>
-                        <th>Max Trafic</th>
-                        <th>Date Max</th>
-                        <th>Occurrences</th>
-                        <th>État</th>
+                        <th style="white-space: nowrap;">Site</th>
+                        <th style="white-space: nowrap;">Classif.</th>
+                        <th style="white-space: nowrap;">Type</th>
+                        <th style="white-space: nowrap;">Max TDD</th>
+                        <th style="white-space: nowrap;">Max FDD</th>
+                        <th style="white-space: nowrap;">Trafic Max</th>
+                        <th style="white-space: nowrap;">Cap TDD</th>
+                        <th style="white-space: nowrap;">Cap FDD</th>
+                        <th style="white-space: nowrap;">Taux Util.</th>
+                        <th style="white-space: nowrap;">Taux TDD</th>
+                        <th style="white-space: nowrap;">Taux FDD</th>
+                        <th style="white-space: nowrap;">Occ.</th>
+                        <th style="white-space: nowrap;">Occ. TDD</th>
+                        <th style="white-space: nowrap;">Occ. FDD</th>
+                        <th style="white-space: nowrap;">Statut</th>
+                        <th style="white-space: nowrap;">État</th>
+                        <th style="white-space: nowrap;">Drop TDD</th>
+                        <th style="white-space: nowrap;">Drop FDD</th>
+                        <th style="white-space: nowrap;">Drop TF</th>
+                        <th style="white-space: nowrap;">MAJ Capacité</th>
+                        <th style="white-space: nowrap;">Dernière action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for site in sites %}
                         <tr>
                             <td><strong>{{ site.siteName }}</strong></td>
-                            <td>{{ site.pairedSiteName ?: '-' }}</td>
-                            <td><span class="service-badge">{{ site.serviceName ?: '-' }}</span></td>
                             <td>{{ site.classification ?: '-' }}</td>
                             <td>{{ site.typeTrans ?: '-' }}</td>
-                            <td>{{ site.maxTrafic|number_format(2, '.', ' ') }}</td>
-                            <td>{{ site.dateMax ? site.dateMax|date('d/m/Y H:i') : '-' }}</td>
+                            <td>{{ site.maxTraficTdd is not null ? site.maxTraficTdd|number_format(2, '.', ' ') : '-' }}</td>
+                            <td>{{ site.maxTraficFdd is not null ? site.maxTraficFdd|number_format(2, '.', ' ') : '-' }}</td>
+                            <td>{{ site.maxTrafic is not null ? site.maxTrafic|number_format(2, '.', ' ') : '-' }}</td>
+                            <td>{{ site.capaciteTddMbps is not null ? site.capaciteTddMbps|number_format(2, '.', ' ') : '-' }}</td>
+                            <td>{{ site.capaciteFddMbps is not null ? site.capaciteFddMbps|number_format(2, '.', ' ') : '-' }}</td>
+                            <td>{{ site.tauxUtilisation is not null ? site.tauxUtilisation|number_format(2, '.', ' ') ~ '%' : '-' }}</td>
+                            <td>{{ site.tauxUtilisationTdd is not null ? site.tauxUtilisationTdd|number_format(2, '.', ' ') ~ '%' : '-' }}</td>
+                            <td>{{ site.tauxUtilisationFdd is not null ? site.tauxUtilisationFdd|number_format(2, '.', ' ') ~ '%' : '-' }}</td>
                             <td>{{ site.nombreOccurrences }}</td>
+                            <td>{{ site.nombreOccurrencesTdd is not null ? site.nombreOccurrencesTdd : '-' }}</td>
+                            <td>{{ site.nombreOccurrencesFdd is not null ? site.nombreOccurrencesFdd : '-' }}</td>
+                            <td>{{ site.status ?: '-' }}</td>
                             <td>
-                                {% if site.isCritical %}
+                                {% set st = site.siteStatus %}
+                                {% if st == 'CRITIQUE' %}
                                     <span class="badge red">Critique</span>
+                                {% elseif st == 'SURVEILLANCE' %}
+                                    <span class="badge orange">Sous obs.</span>
+                                {% elseif st == 'SECURISE' %}
+                                    <span class="badge green">Sécurisé</span>
+                                {% elseif st == 'ERREUR_EVALUATION' %}
+                                    <span class="badge gray">Erreur</span>
                                 {% else %}
-                                    <span class="badge green">Normal</span>
+                                    <span class="badge gray">Non éval.</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ site.dropCongTdd is not null ? site.dropCongTdd : '-' }}</td>
+                            <td>{{ site.dropCongFdd is not null ? site.dropCongFdd : '-' }}</td>
+                            <td>{{ site.dropCongTf is not null ? site.dropCongTf : '-' }}</td>
+                            {# ✅ NOUVEAU : ces 2 colonnes restent vides ('-')
+                               tant que le site n'a jamais fait l'objet
+                               d'une mise à jour de capacité manuelle ou
+                               via import capacité séparé. #}
+                            <td>
+                                {% if site.capaciteUpdatedAt %}
+                                    <span class="badge blue-soft">{{ site.capaciteUpdatedAt|date('d/m/Y H:i') }}</span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if site.lastActionPerformed %}
+                                    <span title="{{ site.lastActionPerformed }}">{{ site.lastActionPerformed|length > 28 ? (site.lastActionPerformed|slice(0, 28) ~ '…') : site.lastActionPerformed }}</span>
+                                {% else %}
+                                    -
                                 {% endif %}
                             </td>
                         </tr>
                     {% else %}
                         <tr>
-                            <td colspan="9" class="empty-state">Aucun site trouvé</td>
+                            <td colspan="21" class="empty-state">Aucun site trouvé</td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
 
-        <!-- Pagination -->
         {% if pagination.totalPages > 1 %}
             <div class="pagination">
                 {% for p in 1..pagination.totalPages %}
-                    <a href="{{ path('superuser_dashboard_sites', {page: p, service: currentService, classification: currentClassification, search: currentSearch}) }}" 
-                       class="page-link {% if p == pagination.page %}active{% endif %}">{{ p }}</a>
+                    <a href="{{ path('superuser_dashboard_sites', {
+                        page: p,
+                        service: currentService,
+                        classification: currentClassification,
+                        status: currentStatus,
+                        search: currentSearch
+                    }) }}"
+                       class="page-link {% if p == pagination.page %}active{% endif %}">
+                        {{ p }}
+                    </a>
                 {% endfor %}
             </div>
         {% endif %}
@@ -103,12 +168,22 @@
 </div>
 
 <style>
+.service-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
 .service-tabs {
     display: flex;
     gap: 10px;
-    margin-bottom: 25px;
     flex-wrap: wrap;
+    margin-bottom: 0;
 }
+
 .service-tab {
     padding: 8px 20px;
     border-radius: 30px;
@@ -122,15 +197,29 @@
     background: #3b82f6;
     color: white;
 }
-.service-badge {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 600;
-    background: #e2e8f0;
-    color: #475569;
+
+.btn-export {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #f8d7da;
+    color: #721c24;
+    padding: 8px 20px;
+    border-radius: 30px;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 14px;
+    border: 1px solid #f5c6cb;
+    transition: background 0.2s, border-color 0.2s;
+    white-space: nowrap;
 }
+.btn-export:hover {
+    background: #f8d4d9;
+    border-color: #e0a6ad;
+    color: #721c24;
+    text-decoration: none;
+}
+
 .filters-form {
     display: flex;
     gap: 20px;
@@ -147,7 +236,8 @@
     font-weight: 600;
     color: #64748b;
 }
-.filter-group select, .filter-group input {
+.filter-group select,
+.filter-group input {
     padding: 8px 12px;
     border: 1px solid #cbd5e1;
     border-radius: 8px;
@@ -170,6 +260,7 @@
     display: flex;
     gap: 8px;
     justify-content: center;
+    flex-wrap: wrap;
 }
 .page-link {
     padding: 6px 12px;
@@ -181,7 +272,7 @@
 .page-link.active {
     background: #3b82f6;
     color: white;
-    border-color: #3b82f6;
+    border-color: #86b1f5;
 }
 .badge {
     padding: 4px 12px;
@@ -189,13 +280,18 @@
     font-size: 12px;
     font-weight: 600;
 }
-.badge.red {
-    background: #fee2e2;
-    color: #dc2626;
+.badge.red { background: #fee2e2; color: #dc2626; }
+.badge.orange { background: #ffedd5; color: #ea580c; }
+.badge.green { background: #dcfce7; color: #16a34a; }
+.badge.gray { background: #f1f5f9; color: #64748b; }
+.badge.blue-soft { background: #eff6ff; color: #1d4ed8; border-radius: 8px; padding: 3px 8px; font-weight: 600; font-size: 12px; }
+
+.workflow-table {
+    font-size: 12px;
 }
-.badge.green {
-    background: #dcfce7;
-    color: #16a34a;
+.workflow-table th,
+.workflow-table td {
+    padding: 6px 8px;
 }
 </style>
 {% endblock %}

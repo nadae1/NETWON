@@ -3,30 +3,179 @@
 {% block dashboard_content %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
 <style>
-    /* ... vos styles (inchangés) ... */
+.toolbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.filters-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 10px 14px;
+}
+.filters-bar .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.filters-bar .filter-group label {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
+}
+.filters-bar select {
+    height: 38px;
+    padding: 0 12px;
+    border-radius: 9px;
+    border: 1px solid #d8dee5;
+    background: #f8fafc;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #1e293b;
+    min-width: 140px;
+}
+.filters-bar .filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    height: 100%;
+    padding-top: 16px;
+}
+.filters-bar .filter-actions .btn,
+.filters-bar .filter-actions .btn-outline {
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 16px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.toolbar-actions .btn-primary {
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 18px;
+    border-radius: 10px;
+    font-weight: 700;
+}
+
+.map-legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.map-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 15px;
+    border-radius: 999px;
+    border: 1.5px solid #e2e8f0;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    color: #475569;
+    transition: all .15s;
+}
+.map-filter-btn:hover { border-color: #cbd5e1; background: #f8fafc; }
+.map-filter-btn.active { background: #0f172a; color: #fff; border-color: #0f172a; }
+.map-filter-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.map-export-btn {
+    margin-left: auto;
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 9px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+}
+.map-export-btn:hover { background: #f8fafc; }
+
+#map { border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+.leaflet-popup-content-wrapper { border-radius: 12px; }
+.site-popup { font-size: 13px; line-height: 1.6; }
+.site-popup strong { font-size: 14px; color: #0f172a; }
+.site-popup .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 4px;
+}
 </style>
 
-<div class="admin-dashboard">
-    <div class="page-header">
-        <div>
-            <h2 class="page-title">Admin Dashboard</h2>
-            <div class="page-desc">Vue globale d'administration - consultation et export uniquement</div>
-        </div>
-        <div>
+<div class="dashboard-home dashboard-home--admin">
+    <div class="toolbar-row">
+        <form method="get" action="{{ path('admin_dashboard_home') }}" class="filters-bar">
+            <div class="filter-group">
+                <label>Service</label>
+                <select name="service">
+                    <option value="">Tous</option>
+                    {% for svc in allServices %}
+                        <option value="{{ svc }}" {% if svc == currentService %}selected{% endif %}>{{ svc }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Classification</label>
+                <select name="classification">
+                    <option value="">Toutes</option>
+                    {% for class in allClassifications %}
+                        <option value="{{ class }}" {% if class == currentClassification %}selected{% endif %}>{{ class }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>État critique</label>
+                <select name="critical">
+                    <option value="">Tous</option>
+                    <option value="1" {% if currentCritical == '1' %}selected{% endif %}>Critique</option>
+                    <option value="0" {% if currentCritical == '0' %}selected{% endif %}>Normal</option>
+                </select>
+            </div>
+            <div class="filter-actions">
+                <button type="submit" class="btn">Filtrer</button>
+                <a href="{{ path('admin_dashboard_home') }}" class="btn-outline">Réinitialiser</a>
+            </div>
+        </form>
+
+        <div class="toolbar-actions">
             <a href="{{ path('admin_export_statistics_pdf') }}" class="btn-primary">📥 Exporter les données</a>
         </div>
     </div>
 
-    <!-- 4 cartes statistiques -->
     <div class="stats-grid">
-        <div class="stat-card stat-blue">
+        <div class="stat-card stat-blue with-top-accent">
             <div>
                 <div class="stat-label">Total Sites</div>
                 <div class="stat-value">{{ totalSites }}</div>
@@ -39,7 +188,7 @@
             <div class="stat-icon icon-blue">📡</div>
         </div>
 
-        <div class="stat-card stat-red">
+        <div class="stat-card stat-red with-top-accent">
             <div>
                 <div class="stat-label">Sites Critiques</div>
                 <div class="stat-value">{{ criticalSites }}</div>
@@ -48,16 +197,16 @@
             <div class="stat-icon icon-red">⚠️</div>
         </div>
 
-        <div class="stat-card stat-green">
+        <div class="stat-card stat-green with-top-accent">
             <div>
-                <div class="stat-label">Trafic Moyen</div>
-                <div class="stat-value">{{ avgTraffic }}</div>
-                <div class="stat-small">Mbps</div>
+                <div class="stat-label">Avancement Workflows</div>
+                <div class="stat-value">{{ workflowProgress }}%</div>
+                <div class="stat-small">{{ workflowCompletedSites }}/{{ workflowTotalSites }} sites • {{ activeWorkflows }}/{{ totalWorkflows }} workflows actifs</div>
             </div>
-            <div class="stat-icon icon-green">📊</div>
+            <div class="stat-icon icon-green">🛠️</div>
         </div>
 
-        <div class="stat-card stat-purple">
+        <div class="stat-card stat-purple with-top-accent">
             <div>
                 <div class="stat-label">Services Actifs</div>
                 <div class="stat-value">{{ serviceDistribution|length }}</div>
@@ -67,42 +216,17 @@
         </div>
     </div>
 
-    <!-- Filtres -->
-    <form method="get" action="{{ path('admin_dashboard_home') }}" class="filters-bar">
-        <label>Service :
-            <select name="service">
-                <option value="">Tous</option>
-                {% for svc in allServices %}
-                    <option value="{{ svc }}" {% if svc == currentService %}selected{% endif %}>{{ svc }}</option>
-                {% endfor %}
-            </select>
-        </label>
-        <label>Classification :
-            <select name="classification">
-                <option value="">Toutes</option>
-                {% for class in allClassifications %}
-                    <option value="{{ class }}" {% if class == currentClassification %}selected{% endif %}>{{ class }}</option>
-                {% endfor %}
-            </select>
-        </label>
-        <label>État critique :
-            <select name="critical">
-                <option value="">Tous</option>
-                <option value="1" {% if currentCritical == '1' %}selected{% endif %}>Critique</option>
-                <option value="0" {% if currentCritical == '0' %}selected{% endif %}>Normal</option>
-            </select>
-        </label>
-        <button type="submit" class="btn">Filtrer</button>
-        <a href="{{ path('admin_dashboard_home') }}" class="btn btn-outline">Réinitialiser</a>
-    </form>
-
-    <!-- Carte -->
     <div class="map-container" id="mapContainer">
-        <div id="map"></div>
-        <button class="map-export-btn" id="exportMapBtn">📷 Exporter la carte</button>
+        <div class="map-legend">
+            <button class="map-filter-btn active" data-status="all">Tous</button>
+            <button class="map-filter-btn" data-status="critique"><span class="map-filter-dot" style="background:#ef4444;"></span> Critiques</button>
+            <button class="map-filter-btn" data-status="surveillance"><span class="map-filter-dot" style="background:#f59e0b;"></span> Sous observation</button>
+            <button class="map-filter-btn" data-status="securise"><span class="map-filter-dot" style="background:#10b981;"></span> Sécurisés</button>
+            <button class="map-export-btn" id="exportMapBtn">📷 Exporter la carte</button>
+        </div>
+        <div id="map" style="height:480px;"></div>
     </div>
 
-    <!-- Graphiques -->
     <div class="charts-grid">
         <div class="chart-card">
             <div class="chart-title">Classification des sites</div>
@@ -124,40 +248,28 @@
         </div>
     </div>
 
-    <!-- Derniers sites -->
     <div class="card" style="margin-top:30px;">
-        <h3 class="panel-title">Derniers sites traités</h3>
-        {% if sites is empty %}
-            <div class="empty-state">Aucune donnée importée.</div>
+        <h3 class="panel-title">Derniers sites traités par un workflow</h3>
+        {% if recentProcessedSites is empty %}
+            <div class="empty-state">Aucun site n'a encore été marqué comme traité (completed) dans un workflow.</div>
         {% else %}
             <div class="table-like">
                 <div class="table-row" style="background:#f8fafc; font-weight:600;">
                     <div>Site</div>
                     <div>Service</div>
-                    <div>Classification</div>
                     <div>Type Trans</div>
-                    <div>Trafic Max</div>
-                    <div>État</div>
+                    <div>Workflow</div>
+                    <div>Dernière MAJ</div>
                 </div>
-                {% for site in sites|slice(0, 5) %}
+                {% for site in recentProcessedSites %}
                     <div class="table-row">
                         <div><strong>{{ site.siteName }}</strong></div>
-                        <div><span class="badge" style="background:#e2e8f0;">{{ site.service ?? '-' }}</span></div>
-                        <div>{{ site.classification ?? '-' }}</div>
+                        <div><span class="badge" style="background:#e2e8f0;">{{ site.serviceName ?? '-' }}</span></div>
                         <div>{{ site.typeTrans ?? '-' }}</div>
-                        <div>{{ site.maxTrafic|number_format(2, '.', ' ') }} Mbps</div>
-                        <div>
-                            {% if site.isCritical %}
-                                <span class="badge red">Critique</span>
-                            {% else %}
-                                <span class="badge green">Normal</span>
-                            {% endif %}
-                        </div>
+                        <div>#{{ site.ticketId }} — {{ site.ticketTitle }}</div>
+                        <div>{{ site.ticketUpdatedAt ? site.ticketUpdatedAt|date('d/m/Y H:i') : '-' }}</div>
                     </div>
                 {% endfor %}
-            </div>
-            <div class="view-all-link">
-                <a href="{{ path('admin_dashboard_sites') }}" class="btn-outline">Voir tous les sites →</a>
             </div>
         {% endif %}
     </div>
@@ -165,7 +277,6 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // Graphiques
     const classificationStats = {{ classificationStats|json_encode|raw }};
     const serviceDistribution = {{ serviceDistribution|json_encode|raw }};
 
@@ -187,14 +298,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    tooltip: {
-                        backgroundColor: '#ffffff',
-                        titleColor: '#020617',
-                        bodyColor: '#2563eb',
-                        borderColor: '#e2e8f0',
-                        borderWidth: 1,
-                        padding: 14
-                    },
+                    tooltip: { backgroundColor: '#ffffff', titleColor: '#020617', bodyColor: '#2563eb', borderColor: '#e2e8f0', borderWidth: 1, padding: 14 },
                     legend: { position: 'bottom' }
                 },
                 scales: {
@@ -211,11 +315,7 @@ document.addEventListener('DOMContentLoaded', function () {
             data: {
                 labels: ['FO', 'FH', 'SHARED'],
                 datasets: [{
-                    data: [
-                        serviceDistribution.FO || 0,
-                        serviceDistribution.FH || 0,
-                        serviceDistribution.SHARED || 0
-                    ],
+                    data: [serviceDistribution.FO || 0, serviceDistribution.FH || 0, serviceDistribution.SHARED || 0],
                     backgroundColor: ['#3b82f6', '#14b8a6', '#8b5cf6'],
                     borderColor: '#ffffff',
                     borderWidth: 4,
@@ -227,101 +327,77 @@ document.addEventListener('DOMContentLoaded', function () {
                 maintainAspectRatio: false,
                 cutout: '55%',
                 plugins: {
-                    tooltip: {
-                        backgroundColor: '#ffffff',
-                        titleColor: '#020617',
-                        bodyColor: '#2563eb',
-                        borderColor: '#e2e8f0',
-                        borderWidth: 1,
-                        padding: 14
-                    },
+                    tooltip: { backgroundColor: '#ffffff', titleColor: '#020617', bodyColor: '#2563eb', borderColor: '#e2e8f0', borderWidth: 1, padding: 14 },
                     legend: { display: false }
                 }
             }
         });
     }
 
-    // Carte Leaflet
-    const sitesData = {{ sites|json_encode|raw }};
-    console.log('Données carte :', sitesData); // débogage
+    // --- Carte Tunisie : marqueurs ronds nets, sans cluster, popup redesigné ---
+    const map = L.map('map', { zoomControl: true }).setView([34.0, 9.0], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 18
+    }).addTo(map);
 
-    if (sitesData.length === 0) {
-        document.getElementById('map').innerHTML = '<p style="text-align:center;padding:60px;color:#64748b;">Aucun site géolocalisé. Importez des coordonnées via l\'option Import du Superuser.</p>';
-    } else {
-        const map = L.map('map').setView([34.0, 9.0], 7);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
+    let markerGroup = L.layerGroup().addTo(map);
 
-        const markers = L.markerClusterGroup();
+    const colorForStatus = { 'Critique': '#ef4444', 'Sous observation': '#f59e0b', 'Sécurisé': '#10b981', 'Non évalué': '#94a3b8' };
+    const pillBgForStatus = { 'Critique': '#fee2e2', 'Sous observation': '#fef3c7', 'Sécurisé': '#d1fae5', 'Non évalué': '#f1f5f9' };
+    const pillColorForStatus = { 'Critique': '#991b1b', 'Sous observation': '#92400e', 'Sécurisé': '#065f46', 'Non évalué': '#475569' };
 
-        // Icônes personnalisées
-        const criticalIcon = L.divIcon({
-            className: 'custom-div-icon',
-            html: '<div style="background:#ef4444;width:18px;height:18px;border-radius:50%;border:2px solid white;box-shadow:0 0 6px rgba(0,0,0,0.4);"></div>',
-            iconSize: [18, 18],
-            iconAnchor: [9, 9]
-        });
-        const warningIcon = L.divIcon({
-            className: 'custom-div-icon',
-            html: '<div style="background:#f59e0b;width:18px;height:18px;border-radius:50%;border:2px solid white;box-shadow:0 0 6px rgba(0,0,0,0.4);"></div>',
-            iconSize: [18, 18],
-            iconAnchor: [9, 9]
-        });
-        const safeIcon = L.divIcon({
-            className: 'custom-div-icon',
-            html: '<div style="background:#10b981;width:18px;height:18px;border-radius:50%;border:2px solid white;box-shadow:0 0 6px rgba(0,0,0,0.4);"></div>',
-            iconSize: [18, 18],
-            iconAnchor: [9, 9]
-        });
+    async function loadMapData(status) {
+        markerGroup.clearLayers();
+        try {
+            const res = await fetch(`{{ path('admin_map_data') }}?status=${status}`);
+            const geojson = await res.json();
 
-        sitesData.forEach(site => {
-            if (site.latitude && site.longitude) {
-                const lat = parseFloat(site.latitude);
-                const lng = parseFloat(site.longitude);
-                let icon;
-                if (site.isCritical) {
-                    icon = criticalIcon;
-                } else if (site.maxTrafic && parseFloat(site.maxTrafic) > 1000) {
-                    icon = warningIcon;
-                } else {
-                    icon = safeIcon;
-                }
-                const popupContent = `
-                    <strong>${site.siteName}</strong><br>
-                    Service: ${site.service || 'N/A'}<br>
-                    Classification: ${site.classification || 'N/A'}<br>
-                    Trafic max: ${site.maxTrafic || 0} Mbps<br>
-                    État: ${site.isCritical ? '⚠️ Critique' : (parseFloat(site.maxTrafic) > 1000 ? '🟡 Sous observation' : '✅ Sécurisé')}
-                `;
-                const marker = L.marker([lat, lng], { icon: icon })
-                    .bindPopup(popupContent);
-                markers.addLayer(marker);
-            }
-        });
+            geojson.features.forEach(f => {
+                const [lng, lat] = f.geometry.coordinates;
+                const props = f.properties;
+                const color = colorForStatus[props.status] || '#94a3b8';
 
-        map.addLayer(markers);
-        if (markers.getLayers().length > 0) {
-            const group = L.featureGroup(markers.getLayers());
-            map.fitBounds(group.getBounds().pad(0.1));
+                const marker = L.circleMarker([lat, lng], {
+                    radius: 7,
+                    weight: 2,
+                    color: '#ffffff',
+                    fillColor: color,
+                    fillOpacity: 0.95
+                }).bindPopup(`
+                    <div class="site-popup">
+                        <strong>${props.name}</strong><br>
+                        Service : ${props.service || 'N/A'}<br>
+                        Trafic max : ${props.traffic || 0} Mbps<br>
+                        <span class="pill" style="background:${pillBgForStatus[props.status]}; color:${pillColorForStatus[props.status]};">${props.status}</span>
+                    </div>
+                `);
+                marker.addTo(markerGroup);
+            });
+        } catch (e) {
+            console.error('Erreur chargement carte :', e);
         }
     }
 
-    // Export de la carte
-    document.getElementById('exportMapBtn').addEventListener('click', function() {
-        const mapContainer = document.getElementById('mapContainer');
-        html2canvas(mapContainer, {
-            useCORS: true,
-            allowTaint: true,
-            backgroundColor: '#ffffff'
-        }).then(canvas => {
-            const link = document.createElement('a');
-            link.download = 'carte_sites.png';
-            link.href = canvas.toDataURL('image/png');
-            link.click();
-        }).catch(err => {
-            alert('Erreur lors de l\'export : ' + err);
+    document.querySelectorAll('.map-filter-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.map-filter-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            loadMapData(this.dataset.status);
         });
+    });
+
+    loadMapData('all');
+
+    document.getElementById('exportMapBtn').addEventListener('click', function () {
+        html2canvas(document.getElementById('mapContainer'), { useCORS: true, allowTaint: true, backgroundColor: '#ffffff' })
+            .then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'carte_sites.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            })
+            .catch(err => alert('Erreur lors de l\'export : ' + err));
     });
 });
 </script>

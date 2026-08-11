@@ -1,0 +1,104 @@
+name: pfe-5g
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in the deployment environment}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in the deployment environment}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the deployment environment}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  api-python:
+    build:
+      context: .
+      dockerfile: api_python/Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:?Set POSTGRES_DB in the deployment environment}
+      DB_USER: ${POSTGRES_USER:?Set POSTGRES_USER in the deployment environment}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the deployment environment}
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
+    command: ["php", "bin/console", "doctrine:migrations:migrate", "--no-interaction", "--allow-no-migration"]
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET:?Set APP_SECRET in the deployment environment}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in the deployment environment}
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  symfony:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET:?Set APP_SECRET in the deployment environment}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in the deployment environment}
+      PYTHON_API_BASE_URL: http://api-python:8001
+      DEFAULT_URI: ${DEFAULT_URI:?Set DEFAULT_URI to the public application URL}
+      CRON_TOKEN: ${CRON_TOKEN:?Set CRON_TOKEN in the deployment environment}
+      MAILER_DSN: ${MAILER_DSN:?Set MAILER_DSN in the deployment environment}
+      OLLAMA_URL: ${OLLAMA_URL:?Set OLLAMA_URL to the Ollama service URL}
+    networks:
+      - backend
+      - frontend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+      api-python:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1/ > /dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true
+
+volumes:
+  postgres_data:

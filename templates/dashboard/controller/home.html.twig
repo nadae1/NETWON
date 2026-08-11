@@ -1,0 +1,112 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="dashboard-home dashboard-home--controller">
+    <div class="dashboard-home-toolbar">
+        <div>
+            <h1 class="page-title">Dashboard Controller</h1>
+            <div class="page-subtitle">Gestion des comptes ROLE_USER</div>
+        </div>
+
+        <div class="dashboard-home-actions">
+            <a href="{{ path('controller_user_new') }}" class="btn-primary">+ Créer un utilisateur</a>
+            <a href="{{ path('controller_logs') }}" class="btn-secondary">Voir les logs</a>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card stat-blue with-top-accent">
+            <div>
+                <div class="stat-label">Utilisateurs gérés</div>
+                <div class="stat-value">{{ totalUsers }}</div>
+                <div class="stat-small">ROLE_USER uniquement</div>
+            </div>
+            <div class="stat-icon icon-blue">👥</div>
+        </div>
+
+        <div class="stat-card stat-green with-top-accent">
+            <div>
+                <div class="stat-label">Services utilisés</div>
+                <div class="stat-value">{{ totalServices }}</div>
+                <div class="stat-small">Services existants du projet</div>
+            </div>
+            <div class="stat-icon icon-green">🏷️</div>
+        </div>
+
+        <div class="stat-card stat-orange with-top-accent">
+            <div>
+                <div class="stat-label">Entrées de logs</div>
+                <div class="stat-value">{{ totalLogs }}</div>
+                <div class="stat-small">Derniers login/logout enregistrés</div>
+            </div>
+            <div class="stat-icon icon-orange">📄</div>
+        </div>
+
+        <div class="stat-card stat-red with-top-accent">
+            <div>
+                <div class="stat-label">Actions rapides</div>
+                <div class="stat-value">2</div>
+                <div class="stat-small">Créer et consulter les logs</div>
+            </div>
+            <div class="stat-icon icon-red">⚙️</div>
+        </div>
+    </div>
+
+    <div class="charts-grid">
+        <div class="chart-card">
+            <div class="chart-title">Derniers utilisateurs</div>
+
+            {% if recentUsers is empty %}
+                <div class="empty-state">Aucun utilisateur géré pour le moment.</div>
+            {% else %}
+                <div class="table-like">
+                    <div class="table-row table-row-head">
+                        <div>Username</div>
+                        <div>Email</div>
+                        <div>Service</div>
+                        <div>Département</div>
+                        <div>Action</div>
+                    </div>
+                    {% for user in recentUsers %}
+                        <div class="table-row">
+                            <div><strong>{{ user.username }}</strong></div>
+                            <div>{{ user.email ?: '-' }}</div>
+                            <div>{{ user.service ?: '-' }}</div>
+                            <div>{{ user.department ?: '-' }}</div>
+                            <div><a href="{{ path('controller_user_edit', {id: user.id}) }}" class="btn-secondary">Modifier</a></div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">Derniers logs</div>
+
+            {% if recentLogs is empty %}
+                <div class="empty-state">Aucun login n’a encore été enregistré.</div>
+            {% else %}
+                <div class="table-like">
+                    <div class="table-row table-row-head">
+                        <div>Username</div>
+                        <div>Service</div>
+                        <div>Département</div>
+                        <div>Dernier login</div>
+                        <div>Dernier logout</div>
+                    </div>
+                    {% for log in recentLogs %}
+                        {% set logUser = log.user %}
+                        <div class="table-row">
+                            <div><strong>{{ logUser.username }}</strong></div>
+                            <div>{{ logUser.service ?: '-' }}</div>
+                            <div>{{ logUser.department ?: '-' }}</div>
+                            <div>{{ log.lastLoginAt ? log.lastLoginAt|date('d/m/Y H:i') : '-' }}</div>
+                            <div>{{ log.lastLogoutAt ? log.lastLogoutAt|date('d/m/Y H:i') : '-' }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

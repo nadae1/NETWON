@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Rapport Workflows {{ month }}/{{ year }}</title>
+<style>
+    /* === BASE === */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: 'DejaVu Sans', 'Helvetica', Arial, sans-serif;
+        font-size: 11px;
+        color: #1e293b;
+        background: #f8fafc;
+        padding: 20px;
+        line-height: 1.5;
+    }
+
+    /* === EN-TÊTE === */
+    .header {
+        background: #0f172a;
+        color: white;
+        padding: 24px 30px;
+        border-radius: 12px 12px 0 0;
+        margin-bottom: 0;
+    }
+    .header h1 {
+        font-size: 26px;
+        font-weight: 800;
+        margin: 0;
+        letter-spacing: -0.5px;
+    }
+    .header .sub {
+        font-size: 13px;
+        color: #94a3b8;
+        margin-top: 4px;
+    }
+    .header .period {
+        font-weight: 600;
+        color: #e2e8f0;
+    }
+
+    /* === TABLEAU DES STATISTIQUES === */
+    .stats-table {
+        margin: 24px 0 28px;
+    }
+    .stats-table table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .stats-table td {
+        text-align: center;
+        padding: 16px 10px;
+        border-radius: 10px;
+        width: 25%;
+        border: 2px solid;
+        font-weight: 600;
+    }
+    .stat-number {
+        font-size: 34px;
+        font-weight: 800;
+        display: block;
+        line-height: 1.2;
+    }
+    .stat-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: #475569;
+        margin-top: 4px;
+        font-weight: 600;
+    }
+
+    /* Couleurs par carte */
+    .stat-total { background: #eff6ff; border-color: #2563eb; }
+    .stat-total .stat-number { color: #2563eb; }
+
+    .stat-closed { background: #f0fdf4; border-color: #16a34a; }
+    .stat-closed .stat-number { color: #16a34a; }
+
+    .stat-overdue { background: #fef2f2; border-color: #dc2626; }
+    .stat-overdue .stat-number { color: #dc2626; }
+
+    .stat-sites { background: #f5f3ff; border-color: #7c3aed; }
+    .stat-sites .stat-number { color: #7c3aed; }
+
+    /* === TABLEAU PRINCIPAL === */
+    .table-wrap {
+        background: white;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+        margin-top: 6px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10.5px;
+    }
+    th {
+        background: #f1f5f9;
+        color: #1e293b;
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 9px;
+        letter-spacing: 0.4px;
+        padding: 12px 10px;
+        border-bottom: 2px solid #cbd5e1;
+        text-align: left;
+    }
+    td {
+        padding: 10px 10px;
+        border-bottom: 1px solid #e2e8f0;
+        vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:nth-child(even) td { background-color: #fafbfc; }
+
+    /* === BADGES === */
+    .badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    .badge-open { background: #dbeafe; color: #1d4ed8; }
+    .badge-in_progress { background: #fef3c7; color: #b45309; }
+    .badge-blocked { background: #fee2e2; color: #dc2626; }
+    .badge-completed { background: #d1fae5; color: #065f46; }
+    .badge-closed { background: #e2e8f0; color: #475569; }
+
+    /* === SITE TAGS === */
+    .site-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+    }
+    .site-tag {
+        background: #e2e8f0;
+        color: #1e293b;
+        border-radius: 12px;
+        padding: 1px 8px;
+        font-size: 9px;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+
+    /* === FOOTER === */
+    .footer {
+        margin-top: 24px;
+        text-align: center;
+        font-size: 9px;
+        color: #94a3b8;
+        border-top: 1px solid #e2e8f0;
+        padding-top: 14px;
+    }
+
+    .text-muted { color: #94a3b8; }
+    .small { font-size: 9px; }
+    .strong { font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1>📊 Rapport de Workflows</h1>
+    <div class="sub">
+        Période : <span class="period">{{ start|date('d/m/Y') }} → {{ end|date('d/m/Y') }}</span>
+        &nbsp;·&nbsp; Généré le {{ 'now'|date('d/m/Y H:i') }}
+    </div>
+</div>
+
+<!-- Statistiques alignées horizontalement -->
+<div class="stats-table">
+    <table>
+        <tr>
+            <td class="stat-total">
+                <span class="stat-number">{{ total }}</span>
+                <span class="stat-label">Total Workflows</span>
+            </td>
+            <td class="stat-closed">
+                <span class="stat-number">{{ closed }}</span>
+                <span class="stat-label">Clôturés</span>
+            </td>
+            <td class="stat-overdue">
+                <span class="stat-number">{{ overdue }}</span>
+                <span class="stat-label">En retard</span>
+            </td>
+            <td class="stat-sites">
+                <span class="stat-number">{{ sitesProcessed }}</span>
+                <span class="stat-label">Sites traités</span>
+            </td>
+        </tr>
+    </table>
+</div>
+
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th style="width:18%;">Workflow</th>
+                <th style="width:28%;">Sites associés</th>
+                <th style="width:14%;">Action</th>
+                <th style="width:18%;">Utilisateurs</th>
+                <th style="width:12%;">Statut</th>
+                <th style="width:10%; text-align:center;">Sites traités</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for ticket in tickets %}
+            {% set completedSites = 0 %}
+            {% set siteCount = ticket.ticketSites|length %}
+            {% for site in ticket.ticketSites %}
+                {% if site.status == 'completed' %}
+                    {% set completedSites = completedSites + 1 %}
+                {% endif %}
+            {% endfor %}
+
+            {# ✅ Dédoublonnage des utilisateurs avec une map associative #}
+            {% set userMap = {} %}
+            {% for task in ticket.tasks %}
+                {% if task.assignedTo %}
+                    {% set userMap = userMap|merge({(task.assignedTo.username): true}) %}
+                {% endif %}
+            {% endfor %}
+            {% set uniqueUsers = userMap|keys %}
+
+            <tr>
+                <td>
+                    <strong>{{ ticket.title }}</strong>
+                    <div class="small text-muted">#{{ ticket.id }}</div>
+                </td>
+                <td>
+                    <div class="site-list">
+                        {% for site in ticket.ticketSites %}
+                            <span class="site-tag">{{ site.siteName }}</span>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endfor %}
+                    </div>
+                </td>
+                <td>{{ ticket.actionType ?: '-' }}</td>
+                <td>{{ uniqueUsers|join(', ') ?: '-' }}</td>
+                <td>
+                    <span class="badge badge-{{ ticket.status|replace({'_': '-'}) }}">
+                        {{ ticket.status|replace({'_': ' '})|title }}
+                    </span>
+                </td>
+                <td style="text-align:center; font-weight:600;">
+                    {{ completedSites }} / {{ siteCount }}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="footer">
+    Rapport généré automatiquement par NetWON · Tous droits réservés
+</div>
+
+</body>
+</html>

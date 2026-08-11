@@ -54,27 +54,182 @@
     border-radius: 10px;
     transition: width 0.3s;
 }
+.workflow-page .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 25px;
+}
+.status-filter {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+}
+.status-filter a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    padding: 0 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    color: #475569;
+    background: #f1f5f9;
+    text-decoration: none;
+    border: 1px solid transparent;
+    box-sizing: border-box;
+    transition: all 0.2s;
+}
+.status-filter a:hover {
+    background: #e2e8f0;
+    text-decoration: none;
+}
+.status-filter a.active {
+    background: #2563eb;
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+.header-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0;
+}
+.btn-new-workflow,
+.btn-plan-ia {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    padding: 0 18px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1;
+    text-decoration: none;
+    box-sizing: border-box;
+    transition: background 0.2s, transform 0.15s;
+    white-space: nowrap;
+}
+.btn-new-workflow {
+    background: #2563eb;
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+}
+.btn-new-workflow:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+    text-decoration: none;
+    color: #fff;
+}
+.btn-plan-ia {
+    background: #fff;
+    color: #7c3aed;
+    border: 1px solid #ddd6fe;
+}
+.btn-plan-ia:hover {
+    background: #f5f3ff;
+    transform: translateY(-1px);
+    text-decoration: none;
+    color: #7c3aed;
+}
+.search-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.search-input {
+    padding: 8px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 20px;
+    font-size: 13px;
+    min-width: 200px;
+    background: #fff;
+    transition: border-color 0.2s;
+}
+.search-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+}
+.search-btn {
+    padding: 8px 16px;
+    border-radius: 20px;
+    background: #3b82f6;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 13px;
+    transition: background 0.2s;
+}
+.search-btn:hover {
+    background: #2563eb;
+}
+.search-reset {
+    padding: 8px 12px;
+    color: #64748b;
+    text-decoration: none;
+    font-size: 13px;
+}
+.search-reset:hover {
+    color: #0f172a;
+}
+@media (max-width: 768px) {
+    .workflow-page .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .header-actions {
+        width: 100%;
+    }
+    .header-actions .btn-new-workflow,
+    .header-actions .btn-plan-ia {
+        flex: 1 1 auto;
+    }
+    .search-form {
+        width: 100%;
+    }
+    .search-input {
+        flex: 1;
+        min-width: 120px;
+    }
+}
 </style>
 
 <div class="workflow-page">
     <div class="page-header">
-        <div>
-            <h2 class="page-title">Workflows</h2>
-            <div class="page-desc">Gestion des workflows créés par le Superuser</div>
-        </div>
-        <div>
-            <a href="{{ path('superuser_workflow_new') }}" class="btn-primary">+ Nouveau workflow</a>
-            <a href="{{ path('superuser_plan_data') }}" class="btn-secondary" style="margin-left: 10px;">🤖 Plan Data IA</a>
-        </div>
-    </div>
+        <!-- Filtres : recherche + statut -->
+        <div class="status-filter">
+            <form method="get" action="{{ path('superuser_workflow_index') }}" class="search-form">
+                <input type="text" name="search" value="{{ currentSearch }}" placeholder="Rechercher un workflow..." class="search-input">
+                <button type="submit" class="search-btn">Rechercher</button>
+                {% if currentSearch %}
+                    <a href="{{ path('superuser_workflow_index', {status: currentStatus}) }}" class="search-reset">✕ Réinitialiser</a>
+                {% endif %}
+            </form>
 
-    <!-- Filtre par statut -->
-    <div class="service-tabs">
-        <a href="{{ path('superuser_workflow_index') }}" class="service-tab {% if not currentStatus %}active{% endif %}">Tous</a>
-        <a href="{{ path('superuser_workflow_index', {status: 'open'}) }}" class="service-tab {% if currentStatus == 'open' %}active{% endif %}">Ouverts</a>
-        <a href="{{ path('superuser_workflow_index', {status: 'in_progress'}) }}" class="service-tab {% if currentStatus == 'in_progress' %}active{% endif %}">En cours</a>
-        <a href="{{ path('superuser_workflow_index', {status: 'blocked'}) }}" class="service-tab {% if currentStatus == 'blocked' %}active{% endif %}">Bloqués</a>
-        <a href="{{ path('superuser_workflow_index', {status: 'completed'}) }}" class="service-tab {% if currentStatus == 'completed' %}active{% endif %}">Terminés</a>
+            <a href="{{ path('superuser_workflow_index', {search: currentSearch}) }}" class="{% if not currentStatus %}active{% endif %}">Tous</a>
+            <a href="{{ path('superuser_workflow_index', {status: 'open', search: currentSearch}) }}" class="{% if currentStatus == 'open' %}active{% endif %}">Ouverts</a>
+            <a href="{{ path('superuser_workflow_index', {status: 'in_progress', search: currentSearch}) }}" class="{% if currentStatus == 'in_progress' %}active{% endif %}">En cours</a>
+            <a href="{{ path('superuser_workflow_index', {status: 'blocked', search: currentSearch}) }}" class="{% if currentStatus == 'blocked' %}active{% endif %}">Bloqués</a>
+            <a href="{{ path('superuser_workflow_index', {status: 'completed', search: currentSearch}) }}" class="{% if currentStatus == 'completed' %}active{% endif %}">Terminés</a>
+        </div>
+
+        <!-- Boutons d'action -->
+        <div class="header-actions">
+            <a href="{{ path('superuser_workflow_new') }}" class="btn-new-workflow">+ Nouveau workflow</a>
+            <a href="{{ path('superuser_plan_data') }}" class="btn-plan-ia">Plan Data</a>
+            <a href="{{ path('superuser_workflow_stats') }}" class="btn-plan-ia" style="background:#f59e0b; color:#78350f; border:1px solid #fcd34d;">📊 Stats mensuelles</a>
+
+        </div>
     </div>
 
     {% if tickets is empty %}

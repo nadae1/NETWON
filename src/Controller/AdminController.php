@@ -6,7 +6,6 @@ use App\Entity\Service;
 use App\Entity\User;
 use App\Form\AdminUserType;
 use App\Form\ServiceType;
-use App\Repository\NotificationRepository;
 use App\Repository\ServiceRepository;
 use App\Repository\TicketRepository;
 use App\Repository\UserRepository;
@@ -20,7 +19,6 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/admin')]
 class AdminController extends AbstractController
 {
-    // La méthode management() a été supprimée
 
     #[Route('/users', name: 'admin_users', methods: ['GET'])]
     public function listUsers(UserRepository $userRepository): Response
@@ -149,15 +147,7 @@ class AdminController extends AbstractController
         ]);
     }
 
-    #[Route('/notifications', name: 'admin_notifications', methods: ['GET'])]
-    public function notificationLogs(NotificationRepository $repository): Response
-    {
-        $this->denyAccessUnlessGranted('ROLE_ADMIN');
-        $notifications = $repository->findBy([], ['createdAt' => 'DESC'], 100);
-        return $this->render('dashboard/admin/notifications.html.twig', ['notifications' => $notifications]);
-    }
-
-    #[Route('/stats', name: 'admin_stats', methods: ['GET'])]
+  #[Route('/stats', name: 'admin_stats', methods: ['GET'])]
     public function stats(
         TicketRepository $ticketRepository,
         UserRepository $userRepository

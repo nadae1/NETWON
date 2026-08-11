@@ -1,56 +1,181 @@
 {% extends 'dashboard/base_dashboard.html.twig' %}
 
-{% block title %}Tickets Déploiement Télécom{% endblock %}
-
 {% block dashboard_content %}
-<div class="container mx-auto p-4">
-    <h1 class="text-3xl font-bold mb-6">Tickets Déploiement Télécom</h1>
+<style>
+    .deploiement-dashboard { max-width: 1300px; width: 100%; background: #fff; border-radius: 24px; padding: 2rem 2rem 2.5rem; box-shadow: 0 20px 60px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.04); margin: 0 auto; }
+    .dashboard-header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:2rem; }
+    .dashboard-header h1 { font-size:1.5rem; font-weight:600; color:#0b1a33; letter-spacing:-.3px; display:flex; align-items:center; gap:.6rem; }
+    .stats-row { display:flex; flex-wrap:wrap; gap:1rem 2rem; margin-bottom:2rem; padding:.5rem 0 1rem; border-bottom:1px solid #eef2f6; }
+    .stat-item { display:flex; align-items:baseline; gap:.4rem; font-size:.95rem; color:#3e4c5e; font-weight:450; }
+    .stat-item .stat-value { font-size:1.6rem; font-weight:600; color:#0b1a33; letter-spacing:-.5px; }
+    .stat-item .stat-label { color:#6b7a8e; margin-left:2px; }
+    .stat-item .stat-badge { display:inline-block; background:#f0f2f5; border-radius:40px; padding:.1rem .7rem; font-size:.75rem; color:#3e4c5e; margin-left:2px; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:1rem; margin-bottom:1.8rem; align-items:center; }
+    .search-wrapper { flex:1 1 280px; position:relative; }
+    .search-wrapper i { position:absolute; left:1rem; top:50%; transform:translateY(-50%); color:#9aa8b9; font-size:.95rem; }
+    .search-wrapper input { width:100%; padding:.7rem 1rem .7rem 2.8rem; border:1px solid #e2e8f0; border-radius:40px; font-size:.9rem; background:#f8fafc; color:#1a2a3a; outline:none; }
+    .search-wrapper input:focus { border-color:#2e75b6; box-shadow:0 0 0 3px rgba(46,117,182,.08); background:#fff; }
+    .filter-select select { min-width:160px; padding:.7rem 1.2rem; border:1px solid #e2e8f0; border-radius:40px; font-size:.9rem; background:#f8fafc; appearance:none; color:#1a2a3a; cursor:pointer; outline:none; }
+    .btn-filter { background:#2e75b6; color:#fff; border:none; padding:.6rem 1.4rem; border-radius:40px; font-size:.9rem; font-weight:500; cursor:pointer; }
+    .btn-reset { background:transparent; border:none; color:#2e75b6; font-size:.85rem; cursor:pointer; padding:.4rem .8rem; border-radius:40px; text-decoration:none; }
+    .btn-reset:hover { background:#f0f4ff; }
+    .table-wrapper { overflow-x:auto; border-radius:16px; border:1px solid #edf1f7; background:#fff; }
+    table { width:100%; border-collapse:collapse; font-size:.9rem; min-width:750px; }
+    thead { background:#f8fafc; border-bottom:1px solid #e8edf3; }
+    thead th { text-align:left; padding:1rem 1.2rem; font-weight:600; font-size:.8rem; text-transform:uppercase; letter-spacing:.4px; color:#5a6b7e; white-space:nowrap; }
+    tbody tr { border-bottom:1px solid #f0f4f9; transition:background 0.15s ease; }
+    tbody tr:hover { background:#fafcff; }
+    tbody td { padding:1rem 1.2rem; vertical-align:middle; color:#1a2a3a; }
+    .ticket-cell { display:flex; align-items:center; gap:.6rem; }
+    .ticket-cell i { color:#2e75b6; font-size:1.1rem; width:1.4rem; text-align:center; }
+    .ticket-cell .ticket-title { font-weight:500; color:#0b1a33; }
+    .ticket-cell .ticket-sub { display:block; font-size:.75rem; color:#7a8b9e; margin-top:1px; }
+    .badge { display:inline-flex; align-items:center; gap:.3rem; padding:.25rem .9rem; border-radius:40px; font-size:.75rem; font-weight:500; white-space:nowrap; }
+    .badge-pending { background:#f0f4fa; color:#4a5c72; }
+    .badge-in_progress { background:#e8f0fe; color:#1e5aa7; }
+    .badge-blocked { background:#fee9e7; color:#b34033; }
+    .badge-done, .badge-completed { background:#e3f5e8; color:#1a7a4a; }
+    .step-indicator { display:inline-flex; align-items:center; gap:.3rem; background:#eef4fb; padding:.2rem .8rem; border-radius:40px; font-size:.75rem; font-weight:600; color:#2e75b6; text-transform:uppercase; letter-spacing:.03em; }
+    .sites-cell { font-size:.82rem; color:#475569; }
+    .action-links a { margin-right:.5rem; font-size:.8rem; color:#2e75b6; text-decoration:none; font-weight:600; }
+    .action-links a:hover { text-decoration:underline; }
+    .action-links .start-link { color:#16a34a; }
+    .action-links .disabled { color:#9ca3af; pointer-events:none; cursor:default; }
+    .overdue-row { background:#fef2f2 !important; }
+    .overdue-row:hover { background:#fee2e2 !important; }
+    .overdue-badge { background:#fee2e2; color:#dc2626; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:600; margin-left:6px; }
+    .progress-mini { display:inline-block; width:60px; height:4px; background:#e2e8f0; border-radius:4px; overflow:hidden; vertical-align:middle; margin-right:6px; }
+    .progress-mini .fill { height:100%; background:#3b82f6; border-radius:4px; transition:width 0.3s; }
+    .progress-mini .fill.completed { background:#10b981; }
+    .service-badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:600; }
+    .service-badge.fo { background:#dbeafe; color:#1e40af; }
+    .service-badge.fh { background:#fef3c7; color:#d97706; }
+    .service-badge.shared { background:#f3f4f6; color:#4b5563; }
+</style>
 
-    {% if tickets is empty %}
-        <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
-            Aucun ticket assigné à votre service.
+<div class="deploiement-dashboard">
+    <div class="dashboard-header">
+        <h1><i class="fa-solid fa-hard-hat"></i> Déploiement Télécom — Mes tâches</h1>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-item"><span class="stat-value">{{ total|default(0) }}</span><span class="stat-label">Total</span></div>
+        <div class="stat-item"><span class="stat-value">{{ pending|default(0) }}</span><span class="stat-label">En attente</span></div>
+        <div class="stat-item"><span class="stat-value">{{ inProgress|default(0) }}</span><span class="stat-label">En cours</span></div>
+        <div class="stat-item">
+            <span class="stat-value">{{ blocked|default(0) }}</span><span class="stat-label">Bloqués</span>
+            {% if blocked|default(0) > 0 %}<span class="stat-badge">⚠️</span>{% endif %}
         </div>
-    {% else %}
-        <div class="overflow-x-auto bg-white rounded-lg shadow border">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">#</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Titre</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Statut</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Progression</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Sites pertinents</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Créé le</th>
-                        <th class="px-6 py-3"></th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    {% for ticket in tickets %}
-                        {% set visibleSites = ticket.ticketSites|filter(ts => ts.typeTrans|upper == app.user.service|upper) %}
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{{ ticket.id }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ ticket.title }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                <span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold bg-orange-100 text-orange-800">
-                                    {{ ticket.status|replace({'_': ' '})|upper }}
-                                </span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                <div class="w-32 bg-gray-200 rounded-full h-2 overflow-hidden">
-                                    <div class="bg-green-500 h-2" style="width: {{ ticket.progress }}%"></div>
+        <div class="stat-item"><span class="stat-value">{{ done|default(0) }}</span><span class="stat-label">Terminées</span></div>
+        <div class="stat-item"><span class="stat-value">{{ overdue|default(0) }}</span><span class="stat-label">En retard</span></div>
+    </div>
+
+    <form method="get" class="toolbar">
+        <div class="search-wrapper">
+            <i class="fas fa-search"></i>
+            <input type="text" name="search" placeholder="Rechercher par titre, site..." value="{{ searchQuery|default('') }}">
+        </div>
+        <div class="filter-select">
+            <select name="status">
+                <option value="">Tous les statuts</option>
+                <option value="pending" {% if currentStatus == 'pending' %}selected{% endif %}>En attente</option>
+                <option value="in_progress" {% if currentStatus == 'in_progress' %}selected{% endif %}>En cours</option>
+                <option value="blocked" {% if currentStatus == 'blocked' %}selected{% endif %}>Bloqué</option>
+                <option value="done" {% if currentStatus == 'done' %}selected{% endif %}>Terminé</option>
+            </select>
+        </div>
+        <button type="submit" class="btn-filter">Filtrer</button>
+        {% if currentStatus or searchQuery %}
+            <a href="{{ path('user_deploiement_index') }}" class="btn-reset">Réinitialiser</a>
+        {% endif %}
+    </form>
+
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Tâche</th>
+                    <th>Étape</th>
+                    <th>Statut</th>
+                    <th>Progression</th>
+                    <th>Sites</th>
+                    <th>Service</th>
+                    <th>Deadline</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in tasks %}
+                    {% set ticket = task.ticket %}
+                    {% set isOverdue = ticket.deadline and ticket.deadline < date('now') and task.status not in ['done', 'completed', 'closed'] %}
+                    <tr class="{% if isOverdue %}overdue-row{% endif %}">
+                        <td>
+                            <div class="ticket-cell">
+                                <i class="fas fa-hard-hat"></i>
+                                <div>
+                                    <span class="ticket-title">{{ task.title }}</span>
+                                    <span class="ticket-sub">Ticket #{{ ticket.id }} — {{ ticket.title }}</span>
                                 </div>
-                                <div class="text-xs text-gray-500 mt-1">{{ ticket.progress }}%</div>
-                            </td>
-                            <td class="px-6 py-4 text-sm text-gray-700">{{ visibleSites|map(ts => ts.siteName)|join(', ') ?: 'Aucun site pertinent' }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ ticket.createdAt|date('d/m/Y H:i') }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
-                                <a href="{{ path('user_deploiement_telecom_show', {id: ticket.id}) }}" class="text-blue-600 hover:underline">Voir</a>
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    {% endif %}
+                            </div>
+                        </td>
+                        <td><span class="step-indicator">{{ task.stepCode|replace({'_': ' '})|capitalize }}</span></td>
+                        <td>
+                            {% if task.status == 'blocked' %}
+                                <span class="badge badge-blocked"><i class="fas fa-circle"></i> Bloqué</span>
+                            {% elseif task.status == 'pending' %}
+                                <span class="badge badge-pending"><i class="fas fa-clock"></i> En attente</span>
+                            {% elseif task.status == 'in_progress' %}
+                                <span class="badge badge-in_progress"><i class="fas fa-spinner"></i> En cours</span>
+                            {% elseif task.status == 'done' or task.status == 'completed' %}
+                                <span class="badge badge-done"><i class="fas fa-check-circle"></i> Terminée</span>
+                            {% else %}
+                                <span class="badge badge-pending">{{ task.status|replace({'_': ' '})|capitalize }}</span>
+                            {% endif %}
+                            {% if isOverdue %}
+                                <span class="overdue-badge">⏰ Retard</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="progress-mini">
+                                <div class="fill {% if ticket.progress >= 100 %}completed{% endif %}" style="width: {{ ticket.progress|default(0) }}%;"></div>
+                            </div>
+                            <span style="font-size:0.7rem; color:#6b7a8e;">{{ ticket.progress|default(0) }}%</span>
+                        </td>
+                        <td class="sites-cell">
+                            {% set taskSites = taskSitesMap[task.id] ?? [] %}
+                            {% for site in taskSites %}
+                                {{ site.siteName }}{% if not loop.last %}, {% endif %}
+                            {% else %}
+                                <span style="color:#9ca3af;">-</span>
+                            {% endfor %}
+                        </td>
+                        <td>
+                            <span class="service-badge {% if ticket.service == 'FO' %}fo{% elseif ticket.service == 'FH' %}fh{% else %}shared{% endif %}">
+                                {{ ticket.service|default('?') }}
+                            </span>
+                        </td>
+                        <td>
+                            {{ ticket.deadline ? ticket.deadline|date('d/m/Y') : 'Non définie' }}
+                            {% if isOverdue %}
+                                <i class="fas fa-exclamation-circle" style="color:#dc2626; margin-left:4px;"></i>
+                            {% endif %}
+                        </td>
+                        <td class="action-links">
+                            <a href="{{ path('user_deploiement_task_show', {id: task.id}) }}">Voir</a>
+                            {% if task.status == 'pending' %}
+                                <a href="{{ path('user_deploiement_task_start', {id: task.id}) }}" class="start-link">Démarrer</a>
+                            {% elseif task.status == 'in_progress' %}
+                                <span class="disabled">En cours</span>
+                            {% else %}
+                                <span class="disabled">Terminé</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="8" style="text-align:center; padding:2rem; color:#6b7a8e;">Aucune tâche trouvée.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 {% endblock %}

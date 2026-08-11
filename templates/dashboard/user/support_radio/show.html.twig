@@ -1,0 +1,141 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<style>
+    .support-container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; }
+    .card { background:#fff; border-radius:.75rem; border:1px solid #e9edf4; padding:1.25rem; margin-bottom:1.25rem; }
+    .section-title { font-size:.95rem; font-weight:600; color:#1e293b; margin-bottom:.8rem; }
+    .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; }
+    @media (max-width:640px) { .grid-2 { grid-template-columns:1fr; } }
+    .site-btn { padding:.4rem .8rem; border-radius:.4rem; border:1px solid #d1d5db; background:#fff; cursor:pointer; font-size:.85rem; display:inline-flex; align-items:center; gap:.4rem; text-decoration:none; color:#1e293b; }
+    .site-btn:hover { background:#f1f5f9; }
+    .site-btn.active { border-color:#2e75b6; background:#eff6ff; }
+    .site-btn.completed { background:#d1fae5; border-color:#10b981; color:#065f46; cursor:default; opacity:.75; pointer-events:none; }
+    .progress-bar { width:100%; height:.5rem; background:#e2e8f0; border-radius:9999px; overflow:hidden; margin:.5rem 0; }
+    .progress-bar .fill { height:100%; background:#3b82f6; border-radius:9999px; transition:width 0.3s; }
+    .badge-status { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 9999px; font-size: 0.65rem; font-weight: 600; text-transform: capitalize; }
+    .badge-done { background: #d1fae5; color: #065f46; }
+    .badge-in_progress { background: #fef3c7; color: #92400e; }
+    .badge-pending { background: #dbeafe; color: #1e40af; }
+    .form-group { margin-bottom:.9rem; }
+    .form-label { display:block; font-size:.78rem; font-weight:500; color:#334155; margin-bottom:.2rem; }
+    .form-control { width:100%; border:1px solid #d1d5db; border-radius:.4rem; padding:.4rem .6rem; font-size:.85rem; background:#fff; }
+    .form-control:focus { outline:none; border-color:#2e75b6; }
+    .btn-success { padding:.5rem 1.2rem; border-radius:.4rem; border:none; font-weight:600; cursor:pointer; background:#16a34a; color:#fff; }
+    .btn-success:hover { background:#15803d; }
+    .btn-success:disabled { background:#9ca3af; cursor:not-allowed; }
+    .info-box { background: #f0f4ff; border-left: 4px solid #2e75b6; padding: 0.8rem 1rem; border-radius: 0.4rem; margin-bottom: 1rem; }
+    .text-center { text-align: center; }
+    .text-green { color: #059669; }
+    .text-gray { color: #6b7280; }
+
+    .btn-pink {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1.2rem;
+        border-radius: 0.4rem;
+        border: none;
+        font-weight: 600;
+        font-size: 0.85rem;
+        cursor: pointer;
+        background: #ec4899;
+        color: #fff;
+        text-decoration: none;
+        transition: background 0.15s;
+    }
+    .btn-pink:hover {
+        background: #db2777;
+        color: #fff;
+        text-decoration: none;
+    }
+</style>
+
+<div class="support-container">
+    <a href="{{ path('user_support_radio_index') }}" class="btn-pink">
+        ← Retour à mes tâches
+    </a>
+
+    <p class="text-sm text-gray-500 mb-4">Ticket · {{ ticket.title }} — Étape : {{ task.stepCode|replace({'_': ' '})|capitalize }}</p>
+
+    <div class="card">
+        <div class="grid-2">
+            <div>
+                <p><span class="text-sm text-gray-500">Statut :</span> 
+                    <span class="badge-status 
+                        {% if task.status == 'done' or task.status == 'completed' %}badge-done
+                        {% elseif task.status == 'in_progress' %}badge-in_progress
+                        {% else %}badge-pending{% endif %}">
+                        {{ task.status|replace({'_': ' '})|capitalize }}
+                    </span>
+                </p>
+                <p><span class="text-sm text-gray-500">Progression ticket :</span> {{ ticket.progress }}%</p>
+            </div>
+            <div>
+                <p><span class="text-sm text-gray-500">Sites traités :</span> {{ processedSites }}/{{ totalSites }}</p>
+            </div>
+        </div>
+        <div class="progress-bar"><div class="fill" style="width: {{ ticket.progress }}%;"></div></div>
+    </div>
+
+    <div class="card">
+        <h2 class="section-title">📋 Sites à traiter ({{ totalSites }})</h2>
+        <div class="flex flex-wrap gap-2">
+            {% for site in sites %}
+                {% set isCompleted = site.status == 'completed' %}
+                <a href="{{ isCompleted ? '#' : path('user_support_radio_task_show', {id: task.id, site: site.id}) }}"
+                   class="site-btn {% if selectedSite and site.id == selectedSite.id %}active{% endif %} {% if isCompleted %}completed{% endif %}"
+                   {% if isCompleted %}onclick="return false;"{% endif %}>
+                    {% if isCompleted %}✓{% endif %} {{ site.siteName }}
+                    {% if isCompleted %}<span style="font-size:0.65rem; color:#10b981;">(fait)</span>{% endif %}
+                </a>
+            {% else %}
+                <span class="text-gray-400">Aucun site</span>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if selectedSite and task.status != 'done' and task.status != 'completed' %}
+        <div class="card">
+            <h2 class="section-title">⚙️ Décision pour <strong>{{ selectedSite.siteName }}</strong></h2>
+            {% set fhFields = task.fhFields ?? [] %}
+            <div class="info-box">
+                <strong>📋 Planification :</strong>
+                {% if fhFields.planification is defined and fhFields.planification %}
+                    {{ fhFields.planification }}
+                {% else %}
+                    Non définie
+                {% endif %}
+                <br>
+                <strong>Commentaire :</strong>
+                {% if fhFields.comment is defined and fhFields.comment %}
+                    {{ fhFields.comment }}
+                {% else %}
+                    -
+                {% endif %}
+            </div>
+
+            <form method="post" action="{{ path('user_support_radio_validate', {id: task.id}) }}">
+                <div class="form-group">
+                    <label class="form-label">Décision</label>
+                    <select name="decision" class="form-control">
+                        <option value="OK">✅ OK — Intervention réalisable</option>
+                        <option value="NOK">❌ NOK — Problème</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Commentaire</label>
+                    <textarea name="comment" rows="3" class="form-control"></textarea>
+                </div>
+                <button type="submit" class="btn-success">✅ Valider</button>
+            </form>
+        </div>
+    {% elseif selectedSite and task.status == 'done' or task.status == 'completed' %}
+        <div class="card">
+            <div class="text-center text-green bg-green-50 border border-green-200 rounded-lg p-4">
+                ✅ Cette tâche a déjà été validée.
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

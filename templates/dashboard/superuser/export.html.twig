@@ -3,52 +3,127 @@
 {% block dashboard_content %}
 <div class="workflow-page">
     <div class="page-header">
-        <div>
-            <h2 class="page-title">Export des données</h2>
-            <div class="page-desc">Exporter les sites vers un fichier CSV</div>
-        </div>
+        <h2 class="page-title">📥 Export de données</h2>
+        <p class="text-muted">Sélectionnez les colonnes à exporter et la période souhaitée.</p>
     </div>
 
     <div class="card">
-        <form method="post" action="{{ path('user_data_export_sites') }}" class="export-form">
-            <div class="form-group">
-                <label>Mode d'export</label>
-                <select name="export_mode" class="form-control">
-                    <option value="all">Tous les sites</option>
-                    <option value="critical">Sites critiques uniquement</option>
-                    <option value="selected">Sites sélectionnés</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label>Filtrer par service</label>
-                <select name="service_filter" class="form-control">
-                    <option value="all">Tous les services</option>
-                    {% for service in services %}
-                        <option value="{{ service }}">{{ service }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label>Recherche de site</label>
-                <input type="text" name="site_search" class="form-control" placeholder="Nom du site...">
-            </div>
-
+        <form method="post" action="{{ path('superuser_export_generate') }}" class="export-form">
+            <!-- Filtres généraux -->
             <div class="form-row">
                 <div class="form-group">
-                    <label>Date de début</label>
-                    <input type="date" name="date_from" class="form-control">
+                    <label>Service</label>
+                    <select name="service_filter" class="form-control">
+                        <option value="all">Tous</option>
+                        {% for service in services %}
+                            <option value="{{ service }}">{{ service }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div class="form-group">
-                    <label>Date de fin</label>
-                    <input type="date" name="date_to" class="form-control">
+                    <label>Classification</label>
+                    <select name="classification_filter" class="form-control">
+                        <option value="all">Toutes</option>
+                        <option value="TF">TF</option>
+                        <option value="COTRANS">COTRANS</option>
+                        <option value="NO_COTRANS">NO_COTRANS</option>
+                        <option value="ONLY_FDD">ONLY_FDD</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Recherche de site</label>
+                    <input type="text" name="site_search" class="form-control" placeholder="Nom du site...">
+                </div>
+            </div>
+
+            <!-- ✅ Périodes d'import disponibles -->
+            <div class="form-group">
+                <label>Période d'import (disponible)</label>
+                <div class="period-grid">
+                    {% for period in periods %}
+                        <label class="period-option">
+                            <input type="radio" name="period" value="{{ period.start }}_{{ period.end }}" {% if loop.first %}checked{% endif %}>
+                            <span>{{ period.label }}</span>
+                        </label>
+                    {% else %}
+                        <p class="text-muted">Aucune période d'import disponible.</p>
+                    {% endfor %}
+                </div>
+                <input type="hidden" name="period_start" id="period_start">
+                <input type="hidden" name="period_end" id="period_end">
+            </div>
+
+            <!-- ✅ Choix des colonnes -->
+            <div class="form-group">
+                <label>Colonnes à exporter</label>
+                <div class="columns-grid">
+                    <div class="column-group">
+                        <h4>Métriques principales</h4>
+                        {% set mainColumns = ['site', 'classification', 'typeTrans', 'maxTrafic', 'maxTraficTdd', 'maxTraficFdd'] %}
+                        {% for key in mainColumns %}
+                            {% set col = allColumns[key] %}
+                            <label class="column-checkbox">
+                                <input type="checkbox" name="columns[]" value="{{ key }}" {% if key in defaultColumns %}checked{% endif %}>
+                                {{ col.label }}
+                            </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="column-group">
+                        <h4>Capacités & Taux</h4>
+                        {% set capacityColumns = ['capaciteTdd', 'capaciteFdd', 'tauxUtilisation', 'tauxUtilisationTdd', 'tauxUtilisationFdd'] %}
+                        {% for key in capacityColumns %}
+                            {% set col = allColumns[key] %}
+                            <label class="column-checkbox">
+                                <input type="checkbox" name="columns[]" value="{{ key }}">
+                                {{ col.label }}
+                            </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="column-group">
+                        <h4>Occurrences & Statuts</h4>
+                        {% set statusColumns = ['nombreOccurrences', 'nombreOccurrencesTdd', 'nombreOccurrencesFdd', 'status', 'siteStatus', 'service', 'isCritical'] %}
+                        {% for key in statusColumns %}
+                            {% set col = allColumns[key] %}
+                            <label class="column-checkbox">
+                                <input type="checkbox" name="columns[]" value="{{ key }}">
+                                {{ col.label }}
+                            </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="column-group">
+                        <h4>DropCong</h4>
+                        {% set dropColumns = ['dropCongTdd', 'dropCongFdd', 'dropCongTf'] %}
+                        {% for key in dropColumns %}
+                            {% set col = allColumns[key] %}
+                            <label class="column-checkbox">
+                                <input type="checkbox" name="columns[]" value="{{ key }}">
+                                {{ col.label }}
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div style="margin-top: 10px;">
+                    <button type="button" id="select-all-columns" class="btn-sm">Tout sélectionner</button>
+                    <button type="button" id="deselect-all-columns" class="btn-sm">Tout désélectionner</button>
                 </div>
             </div>
 
             <div class="form-actions">
-                <button type="submit" class="btn-primary">📥 Exporter en CSV</button>
+                <button type="submit" class="btn-primary">📥 Exporter les sites en CSV</button>
             </div>
+        </form>
+    </div>
+
+    <!-- Export des capacités (existant) -->
+    <div class="card" style="margin-top: 30px;">
+        <h3 class="panel-title">📊 Export des capacités</h3>
+        <p>Exporter les capacités TDD/FDD de tous les sites avec leur dernière mise à jour.</p>
+        <form method="post" action="{{ path('superuser_export_capacities_generate') }}">
+            <button type="submit" class="btn-primary">📊 Exporter les capacités en CSV</button>
         </form>
     </div>
 </div>
@@ -57,7 +132,7 @@
 .export-form {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 24px;
 }
 .form-group {
     display: flex;
@@ -74,15 +149,90 @@
     border: 1px solid #cbd5e1;
     border-radius: 8px;
     font-size: 14px;
-    max-width: 300px;
 }
 .form-row {
     display: flex;
     gap: 20px;
     flex-wrap: wrap;
 }
+.form-row .form-group {
+    flex: 1;
+    min-width: 200px;
+}
 .form-actions {
     margin-top: 10px;
+}
+
+.period-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.period-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+    background: #f8fafc;
+    transition: all 0.2s;
+}
+.period-option:hover {
+    border-color: #3b82f6;
+}
+.period-option input[type="radio"]:checked + span {
+    font-weight: 600;
+    color: #3b82f6;
+}
+.period-option:has(input:checked) {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.columns-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+    background: #f8fafc;
+    padding: 16px;
+    border-radius: 8px;
+}
+.column-group h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+    margin: 0 0 10px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.column-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 13px;
+    cursor: pointer;
+    color: #1e293b;
+}
+.column-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #3b82f6;
+}
+.btn-sm {
+    padding: 6px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+.btn-sm:hover {
+    background: #f1f5f9;
 }
 .btn-primary {
     background: #3b82f6;
@@ -92,6 +242,51 @@
     border-radius: 8px;
     cursor: pointer;
     font-weight: 600;
+    transition: background 0.2s;
+}
+.btn-primary:hover {
+    background: #2563eb;
+}
+.panel-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #0f172a;
+    margin-bottom: 15px;
+}
+.text-muted {
+    color: #94a3b8;
 }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Gestion des périodes : mettre à jour les champs cachés
+    document.querySelectorAll('input[name="period"]').forEach(function(radio) {
+        radio.addEventListener('change', function() {
+            const [start, end] = this.value.split('_');
+            document.getElementById('period_start').value = start;
+            document.getElementById('period_end').value = end;
+        });
+    });
+    // Déclencher le premier
+    const firstRadio = document.querySelector('input[name="period"]');
+    if (firstRadio) {
+        const [start, end] = firstRadio.value.split('_');
+        document.getElementById('period_start').value = start;
+        document.getElementById('period_end').value = end;
+    }
+
+    // Sélection / désélection de toutes les colonnes
+    document.getElementById('select-all-columns').addEventListener('click', function() {
+        document.querySelectorAll('.column-checkbox input[type="checkbox"]').forEach(function(cb) {
+            cb.checked = true;
+        });
+    });
+    document.getElementById('deselect-all-columns').addEventListener('click', function() {
+        document.querySelectorAll('.column-checkbox input[type="checkbox"]').forEach(function(cb) {
+            cb.checked = false;
+        });
+    });
+});
+</script>
 {% endblock %}

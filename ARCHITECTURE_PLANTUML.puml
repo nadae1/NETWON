@@ -1,0 +1,691 @@
+@startuml PFE_5G_Architecture
+
+!define AWSPUML https://raw.githubusercontent.com/tupadr3/plantuml-aws-icons/master/dist
+!include AWSPUML/AWSCommon.puml
+!include AWSPUML/Database/AmazonRDS.puml
+!include AWSPUML/Compute/AmazonEC2.puml
+
+' ============================================
+' HIGH-LEVEL SYSTEM ARCHITECTURE
+' ============================================
+
+title PFE 5G - High-Level System Architecture
+
+package "User Interface" {
+    [Symfony + Twig\nTemplates] as UI
+}
+
+package "Symfony Application\n(PHP 8.2+)" {
+    component "Controllers\n(34)" as Controllers
+    component "Services\n(10)" as Services
+    component "Entities\n(20)" as Entities
+    component "Security\n(RBAC)" as Security
+}
+
+database "PostgreSQL\n(Port 5432)" as DB
+component "FastAPI\nPython API\n(Port 8001)" as PythonAPI
+component "File System\n(Imports/Exports)" as FS
+
+UI --> Controllers : HTTP Requests
+Controllers --> Services : Business Logic
+Services --> Entities : Data Access
+Services --> PythonAPI : HTTP Client
+Services --> DB : Doctrine ORM
+PythonAPI --> DB : Direct Access
+Controllers --> FS : File I/O
+
+note right of PythonAPI
+  Traffic Analysis
+  Capacity Processing
+  Site Classification
+end note
+
+note right of DB
+  Tickets
+  Sites
+  Users
+  Analysis Results
+end note
+
+@enduml
+
+@startuml Component_Diagram
+
+title PFE 5G - Component Diagram
+
+package "Controllers Layer" {
+    [AdminDashboardController] as AdminCtrl
+    [SuperuserDashboardController] as SuperCtrl
+    [UserDashboardController] as UserCtrl
+    [AdminWorkflowController] as AdminWorkflow
+    [DataImportController] as ImportCtrl
+    [DataExportController] as ExportCtrl
+    [UserIpController] as IpCtrl
+    [UserFhController] as FhCtrl
+    [UserDeploiementController] as DepCtrl
+    [WorkflowTicketController] as TicketCtrl
+}
+
+package "Services Layer" {
+    [WorkflowEngineService] as WorkflowEngine
+    [PythonApiClient] as PythonClient
+    [NotificationService] as Notification
+    [IaRecommendationService] as AI
+    [DeadlineAlertService] as Deadline
+    [FhWorkflowService] as FhWorkflow
+    [TicketWorkflowService] as TicketWorkflow
+    [WorkflowAutoAssigner] as AutoAssign
+}
+
+package "Entities Layer" {
+    [Ticket] as TicketEntity
+    [TicketTask] as TaskEntity
+    [User] as UserEntity
+    [ProcessedSite] as SiteEntity
+    [Site] as PhysicalSite
+    [TicketHistory] as HistoryEntity
+    [Notification] as NotifEntity
+}
+
+AdminCtrl --> WorkflowEngine
+AdminCtrl --> ExportCtrl
+SuperCtrl --> TicketCtrl
+UserCtrl --> IpCtrl
+UserCtrl --> FhCtrl
+UserCtrl --> DepCtrl
+
+IpCtrl --> WorkflowEngine
+FhCtrl --> FhWorkflow
+TicketCtrl --> TicketWorkflow
+
+WorkflowEngine --> PythonClient
+WorkflowEngine --> Notification
+WorkflowEngine --> AutoAssign
+WorkflowEngine --> TicketEntity
+
+PythonClient --> AI
+ImportCtrl --> PythonClient
+
+TicketEntity --> TaskEntity
+TicketEntity --> UserEntity
+TicketEntity --> HistoryEntity
+TaskEntity --> UserEntity
+SiteEntity --> PhysicalSite
+Notification --> NotifEntity
+Notification --> UserEntity
+
+@enduml
+
+@startuml Entity_Relationship_Diagram
+
+title PFE 5G - Entity Relationship Diagram
+
+entity "User" as user {
+    *id : INT
+    --
+    *username : VARCHAR
+    *password : VARCHAR
+    *roles : JSON
+    email : VARCHAR
+    service : VARCHAR
+    department : VARCHAR
+    resetCode : VARCHAR
+    resetCodeExpiresAt : DATETIME
+}
+
+entity "Ticket" as ticket {
+    *id : INT
+    --
+    *title : VARCHAR
+    description : TEXT
+    *actionType : VARCHAR
+    *status : VARCHAR
+    *priority : VARCHAR
+    *progress : INT
+    *currentStep : INT
+    *totalSteps : INT
+    *createdAt : DATETIME
+    *updatedAt : DATETIME
+    *startedAt : DATETIME
+    *validatedAt : DATETIME
+    *closedAt : DATETIME
+    *deadline : DATETIME
+    *workflowType : VARCHAR
+    *reference : VARCHAR
+    --
+    createdBy_id : INT
+}
+
+entity "TicketTask" as task {
+    *id : INT
+    --
+    *title : VARCHAR
+    description : TEXT
+    *status : VARCHAR
+    *stepCode : VARCHAR
+    *stepOrder : INT
+    decision : VARCHAR
+    comment : TEXT
+    proofFile : VARCHAR
+    siteValidated : VARCHAR
+    *createdAt : DATETIME
+    *updatedAt : DATETIME
+    *startedAt : DATETIME
+    *completedAt : DATETIME
+    --
+    ticket_id : INT
+    assignedTo_id : INT
+    nextAssignedTo_id : INT
+    serviceName : VARCHAR
+    departmentName : VARCHAR
+}
+
+entity "TicketSite" as ticketsite {
+    *id : INT
+    --
+    siteName : VARCHAR
+    serviceName : VARCHAR
+    typeTrans : VARCHAR
+    status : VARCHAR
+    --
+    ticket_id : INT
+}
+
+entity "TicketComment" as comment {
+    *id : INT
+    --
+    *content : TEXT
+    *createdAt : DATETIME
+    --
+    ticket_id : INT
+    user_id : INT
+}
+
+entity "TicketHistory" as history {
+    *id : INT
+    --
+    *action : VARCHAR
+    *details : TEXT
+    *createdAt : DATETIME
+    --
+    ticket_id : INT
+    user_id : INT
+}
+
+entity "ProcessedSite" as processed {
+    *id : INT
+    --
+    *siteName : VARCHAR
+    *pairedSiteName : VARCHAR
+    *classification : VARCHAR
+    *typeTrans : VARCHAR
+    *maxTrafic : FLOAT
+    *maxTraficTdd : FLOAT
+    *maxTraficFdd : FLOAT
+    *capaciteTddMbps : FLOAT
+    *capaciteFddMbps : FLOAT
+    *capaciteMbps : FLOAT
+    *tauxUtilisation : FLOAT
+    *tauxUtilisationTdd : FLOAT
+    *tauxUtilisationFdd : FLOAT
+    *nombreOccurrences : INT
+    *totalMeasures : INT
+    *dateMax : DATETIME
+    *serviceName : VARCHAR
+    *isCritical : BOOLEAN
+    *siteStatus : VARCHAR
+    *latitude : FLOAT
+    *longitude : FLOAT
+    *derniereMiseAJour : DATETIME
+    *misAJourPar : VARCHAR
+}
+
+entity "Site" as site {
+    *id : INT
+    --
+    *name : VARCHAR
+    *latitude : FLOAT
+    *longitude : FLOAT
+    *status : VARCHAR
+    *service : VARCHAR
+}
+
+entity "Notification" as notification {
+    *id : INT
+    --
+    *type : VARCHAR
+    *message : TEXT
+    *isRead : BOOLEAN
+    *createdAt : DATETIME
+    --
+    user_id : INT
+}
+
+entity "AiRecommendation" as ai {
+    *id : INT
+    --
+    *siteName : VARCHAR
+    *recommendation : TEXT
+    *confidence : FLOAT
+    *createdAt : DATETIME
+}
+
+ticket ||--o{ task : "has many"
+ticket ||--o{ ticketsite : "has many"
+ticket ||--o{ comment : "has many"
+ticket ||--o{ history : "has many"
+ticket }o--|| user : "created by"
+task }o--|| user : "assigned to"
+task }o--|| user : "next assigned to"
+comment }o--|| user : "created by"
+history }o--|| user : "created by"
+notification }o--|| user : "for"
+processed }o--|| site : "references"
+
+@enduml
+
+@startuml Workflow_State_Machine
+
+title PFE 5G - IP Engineering Workflow State Machine
+
+[*] --> engineering_ip : Create Ticket
+
+state engineering_ip {
+    [*] --> Analyzing
+    Analyzing --> Decision : Complete Analysis
+}
+
+state "Decision Point" as decision <<choice>>
+engineering_ip --> decision
+
+decision --> execution_site : OK
+decision --> capillaire_fo : besoin_fo
+decision --> engineering_ip : swap_routeur
+
+state capillaire_fo {
+    [*] --> Studying
+    Studying --> Complete : Study Complete
+}
+
+capillaire_fo --> deploiement_fo
+
+state deploiement_fo {
+    [*] --> Planning
+    Planning --> Complete : Deployment Complete
+}
+
+deploiement_fo --> validation_fo
+
+state validation_fo {
+    [*] --> Validating
+    Validating --> Complete : Validation Complete
+}
+
+validation_fo --> execution_site
+
+state execution_site {
+    [*] --> Executing
+    Executing --> Complete : Execution Complete
+}
+
+execution_site --> validation_finale
+
+state validation_finale {
+    [*] --> FinalValidating
+    FinalValidating --> Decision : Validation Complete
+}
+
+state "Final Decision" as final_decision <<choice>>
+validation_finale --> final_decision
+
+final_decision --> [*] : OK (Completed)
+final_decision --> execution_site : NOK (Correction)
+
+note right of decision
+  Decision Options:
+  - OK: Proceed to deployment
+  - besoin_fo: Need fiber optic
+  - swap_routeur: Router swap needed
+end note
+
+note right of final_decision
+  Final Validation:
+  - OK: Workflow completed
+  - NOK: Return to execution
+end note
+
+@enduml
+
+@startuml FH_Workflow
+
+title PFE 5G - FH (Faisceau Hertzien) Workflow
+
+[*] --> STEP_FH_ETUDE_PREREQUIS : Create FH Ticket
+
+state STEP_FH_ETUDE_PREREQUIS {
+    [*] --> StudyingPrerequis
+    StudyingPrerequis --> Complete : Study Complete
+}
+
+state "FH Decision" as fh_decision <<choice>>
+STEP_FH_ETUDE_PREREQUIS --> fh_decision
+
+fh_decision --> STEP_FH_ETUDE_CAPACITE : OK
+fh_decision --> STEP_FH_BESIN_FO : besoin_fo
+fh_decision --> STEP_FH_SWAP_ROUTEUR : swap_routeur
+
+state STEP_FH_ETUDE_CAPACITE {
+    [*] --> StudyingCapacity
+    StudyingCapacity --> Complete : Capacity Study Complete
+}
+
+STEP_FH_ETUDE_CAPACITE --> STEP_FH_DEPLOIEMENT
+
+state STEP_FH_BESIN_FO {
+    [*] --> StudyingFONeed
+    StudyingFONeed --> Complete : FO Need Study Complete
+}
+
+STEP_FH_BESIN_FO --> STEP_FH_DEPLOIEMENT_FO
+
+state STEP_FH_DEPLOIEMENT_FO {
+    [*] --> DeployingFO
+    DeployingFO --> Complete : FO Deployment Complete
+}
+
+STEP_FH_DEPLOIEMENT_FO --> STEP_FH_DEPLOIEMENT
+
+state STEP_FH_SWAP_ROUTEUR {
+    [*] --> SwappingRouter
+    SwappingRouter --> Complete : Router Swap Complete
+}
+
+STEP_FH_SWAP_ROUTEUR --> STEP_FH_ETUDE_PREREQUIS
+
+state STEP_FH_DEPLOIEMENT {
+    [*] --> Deploying
+    Deploying --> Complete : Deployment Complete
+}
+
+STEP_FH_DEPLOIEMENT --> STEP_FH_VALIDATION
+
+state STEP_FH_VALIDATION {
+    [*] --> Validating
+    Validating --> Complete : Validation Complete
+}
+
+state "FH Final Decision" as fh_final <<choice>>
+STEP_FH_VALIDATION --> fh_final
+
+fh_final --> [*] : OK (Completed)
+fh_final --> STEP_FH_DEPLOIEMENT : NOK (Correction)
+
+@enduml
+
+@startuml Data_Flow_Site_Analysis
+
+title PFE 5G - Site Analysis Data Flow
+
+actor "User" as user
+participant "DataImportController" as import
+participant "PythonApiClient" as client
+participant "FastAPI\n/traiter" as api
+participant "traitement.py" as traitement
+database "PostgreSQL" as db
+participant "AdminDashboardController" as admin
+
+user -> import : Upload Excel Files\n(traffic, port, link, GPS)
+activate import
+
+import -> client : Send files for processing
+activate client
+
+client -> api : POST /traiter\n(multipart form-data)
+activate api
+
+api -> traitement : Process files
+activate traitement
+
+traitement -> traitement : Classify sites\n(TF/TDD/FDD)
+traitement -> traitement : Calculate capacity\nutilization
+traitement -> traitement : Detect congestion\n(>90% threshold)
+traitement -> traitement : Integrate GPS\ncoordinates
+traitement -> traitement : Historical data\ntracking
+
+traitement -> db : Store processed_site\nanalyse_resultat
+activate db
+db --> traitement : Success
+deactivate db
+
+traitement --> api : Return results
+deactivate traitement
+
+api --> client : JSON response
+deactivate api
+
+client --> import : Results
+deactivate client
+
+import -> user : Display success
+deactivate import
+
+user -> admin : View dashboard
+activate admin
+
+admin -> db : Query statistics
+activate db
+db --> admin : Data
+deactivate db
+
+admin --> user : Display statistics\n(Total sites, critical,\nservice distribution)
+deactivate admin
+
+@enduml
+
+@startuml Data_Flow_Ticket_Creation
+
+title PFE 5G - Ticket Creation Workflow
+
+actor "User" as user
+participant "UserIpController" as ipctrl
+participant "WorkflowEngineService" as workflow
+participant "TicketTask" as task
+participant "User Repository" as userrepo
+participant "NotificationService" as notif
+participant "Assigned User" as assignee
+
+user -> ipctrl : Create ticket
+activate ipctrl
+
+ipctrl -> workflow : createInitialIpTask()
+activate workflow
+
+workflow -> workflow : Create Ticket entity
+workflow -> workflow : Create initial task\n(engineering_ip or\nSTEP_FH_ETUDE_PREREQUIS)
+
+workflow -> userrepo : Find user by\ndepartment/service
+activate userrepo
+userrepo --> workflow : User found
+deactivate userrepo
+
+workflow -> task : Assign to user
+workflow -> task : Set status PENDING
+workflow -> task : Set stepCode
+
+workflow -> db : Persist ticket and task
+activate db
+db --> workflow : Success
+deactivate db
+
+workflow -> notif : notify(assignedUser)
+activate notif
+notif -> assignee : Task assignment\nnotification
+deactivate notif
+
+workflow --> ipctrl : Task created
+deactivate workflow
+
+ipctrl --> user : Ticket created\nwith initial task
+deactivate ipctrl
+
+assignee -> user : View notification
+activate assignee
+assignee --> user : Accept task
+deactivate assignee
+
+@enduml
+
+@startuml Deployment_Architecture
+
+title PFE 5G - Deployment Architecture
+
+node "Docker Host" as docker {
+    component "PostgreSQL 16\nPort 5432" as pg
+    component "Symfony App\nPHP 8.2+FPM" as symfony
+    component "FastAPI\nPython 3.x\nPort 8001" as fastapi
+    volume "database_data" as volume
+}
+
+database "External SMTP\nPort 1025" as smtp
+
+symfony --> pg : DATABASE_URL
+symfony --> fastapi : PYTHON_API_BASE_URL
+symfony --> smtp : MAILER_DSN
+fastapi --> pg : DB_CONFIG
+pg --> volume : Persist data
+
+note right of docker
+  Environment:
+  - .env (base config)
+  - .env.local (local overrides)
+  - .env.dev (development)
+  - .env.test (testing)
+end note
+
+note left of symfony
+  Ports:
+  - HTTP: 80/443
+  - HTTPS: 443
+end note
+
+note left of fastapi
+  Endpoints:
+  - POST /traiter
+  - POST /capacite/*
+  - GET /health
+end note
+
+@enduml
+
+@startuml Security_Architecture
+
+title PFE 5G - Security Architecture
+
+package "Symfony Security" {
+    component "SecurityBundle" as security
+    component "Role-Based\nAccess Control" as rbac
+    component "Password\nHasher" as hasher
+    component "Email\nVerification" as verify
+}
+
+package "User Roles" {
+    component "ROLE_ADMIN" as admin
+    component "ROLE_SUPERUSER" as super
+    component "ROLE_USER" as user
+}
+
+package "Access Control" {
+    component "Admin Controllers" as admin_ctrl
+    component "Superuser Controllers" as super_ctrl
+    component "User Controllers" as user_ctrl
+}
+
+security --> rbac
+security --> hasher
+security --> verify
+
+rbac --> admin
+rbac --> super
+rbac --> user
+
+admin --> admin_ctrl : Full access
+super --> super_ctrl : Validation & oversight
+user --> user_ctrl : Service-specific
+
+note right of admin
+  Capabilities:
+  - Full system access
+  - User management
+  - Workflow configuration
+  - All exports
+end note
+
+note right of super
+  Capabilities:
+  - Site validation
+  - Map visualization
+  - KPI monitoring
+  - Site updates
+end note
+
+note right of user
+  Capabilities:
+  - Service-specific tasks
+  - IP engineering
+  - FH workflow
+  - FO deployment
+  - Deployment tasks
+end note
+
+@enduml
+
+@startuml Service_Integration
+
+title PFE 5G - Service Integration Diagram
+
+package "Symfony Services" {
+    [WorkflowEngineService] as workflow
+    [PythonApiClient] as python
+    [NotificationService] as notif
+    [IaRecommendationService] as ai
+    [DeadlineAlertService] as deadline
+}
+
+package "External Services" {
+    component "FastAPI\nPython Backend" as fastapi
+    component "PostgreSQL" as pg
+    component "SMTP Server" as smtp
+}
+
+package "File Processing" {
+    component "PhpSpreadsheet" as excel
+    component "Dompdf" as pdf
+}
+
+workflow --> python : HTTP Client
+python --> fastapi : REST API
+fastapi --> pg : psycopg2
+
+workflow --> notif : Task events
+notif --> smtp : Email sending
+
+workflow --> ai : Capacity analysis
+ai --> pg : Store recommendations
+
+deadline --> workflow : SLA monitoring
+deadline --> notif : Deadline alerts
+
+python --> excel : Excel I/O
+python --> excel : CSV export
+workflow --> pdf : PDF generation
+
+note right of fastapi
+  Endpoints:
+  - POST /traiter
+  - POST /capacite/fo
+  - POST /capacite/fh
+  - POST /capacite/backbone
+  - POST /capacite/all
+end note
+
+@enduml

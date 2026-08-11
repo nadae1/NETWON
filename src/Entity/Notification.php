@@ -4,6 +4,8 @@ namespace App\Entity;
 
 use App\Repository\NotificationRepository;
 use Doctrine\ORM\Mapping as ORM;
+use App\Entity\SiteAlert;
+
 
 #[ORM\Entity(repositoryClass: NotificationRepository::class)]
 #[ORM\Table(name: 'notification')]
@@ -43,6 +45,21 @@ class Notification
 
     #[ORM\Column(type: 'datetime_immutable')]
     private \DateTimeImmutable $createdAt;
+
+    #[ORM\ManyToOne(targetEntity: SiteAlert::class)]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    private ?SiteAlert $alert = null;
+    
+
+      #[ORM\Column(type: 'datetime', nullable: true)]
+    private ?\DateTime $emailSentAt = null;
+
+
+  public function getAlert(): ?SiteAlert { return $this->alert; }
+    public function setAlert(?SiteAlert $alert): self { $this->alert = $alert; return $this; }
+
+    public function getEmailSentAt(): ?\DateTime { return $this->emailSentAt; }
+    public function setEmailSentAt(?\DateTime $emailSentAt): self { $this->emailSentAt = $emailSentAt; return $this; }
 
     public function __construct()
     {

@@ -1,64 +1,205 @@
 {% extends 'dashboard/base_dashboard.html.twig' %}
 
-{% block title %}Statistiques{% endblock %}
+{% block dashboard_content %}
+<style>
+.stats-page { padding: 20px; }
+.stats-monthly {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 24px;
+    border: 1px solid #e2e8f0;
+}
+.month-nav {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+.month-nav a {
+    color: #3b82f6;
+    font-weight: 600;
+    text-decoration: none;
+    font-size: 18px;
+}
+.month-nav span {
+    font-weight: 700;
+    font-size: 18px;
+    min-width: 120px;
+}
+.btn-export-pdf {
+    background: #ef4444;
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    text-decoration: none;
+    margin-left: auto;
+    border: none;
+    cursor: pointer;
+}
+.btn-export-pdf:hover {
+    background: #dc2626;
+    color: #fff;
+    text-decoration: none;
+}
+.stats-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+}
+.stat-card {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 12px 16px;
+    text-align: center;
+}
+.stat-number {
+    font-size: 28px;
+    font-weight: 800;
+    color: #0f172a;
+    display: block;
+}
+.stat-label {
+    font-size: 12px;
+    color: #64748b;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+.workflow-table-wrap {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    overflow-x: auto;
+    padding: 16px;
+}
+.workflow-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+.workflow-table th {
+    background: #f1f5f9;
+    text-align: left;
+    padding: 12px 10px;
+    font-weight: 700;
+    color: #1e293b;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+}
+.workflow-table td {
+    padding: 10px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+}
+.workflow-table tr:hover td {
+    background: #f8fafc;
+}
+.workflow-table .site-list {
+    font-size: 12px;
+    color: #475569;
+    max-width: 200px;
+}
+.workflow-table .site-list span {
+    display: inline-block;
+    background: #e2e8f0;
+    border-radius: 12px;
+    padding: 0 6px;
+    margin: 1px 2px;
+    font-size: 11px;
+}
+.badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+}
+.badge-open { background: #dbeafe; color: #2563eb; }
+.badge-in_progress { background: #fef3c7; color: #d97706; }
+.badge-blocked { background: #fee2e2; color: #dc2626; }
+.badge-completed { background: #dcfce7; color: #16a34a; }
+.badge-closed { background: #e2e8f0; color: #475569; }
+@media (max-width: 768px) {
+    .stats-cards { grid-template-columns: 1fr 1fr; }
+    .month-nav { flex-direction: column; align-items: stretch; }
+    .btn-export-pdf { margin-left: 0; }
+}
+</style>
 
-{% block content %}
-<div class="container mx-auto p-4">
-    <h1 class="text-3xl font-bold mb-6">Statistiques du Système</h1>
-
-    <!-- Summary Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-gray-600 text-sm font-semibold mb-2">Utilisateurs Total</h3>
-            <p class="text-3xl font-bold text-blue-600">{{ totalUsers }}</p>
+<div class="stats-page">
+    <div class="page-header">
+        <h2 class="page-title">📊 Statistiques Workflow - {{ monthLabel }}</h2>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <a href="{{ path('superuser_workflow_stats_export_pdf', {month: currentMonth, year: currentYear}) }}" class="btn btn-export btn-sm" style="padding: 8px 16px; text-decoration: none; border-radius: 8px;">
+                📥 Exporter PDF
+            </a>
+            <a href="{{ path('superuser_workflow_index') }}" class="btn btn-primary-sm btn-sm" style="text-decoration: none;">← Retour</a>
         </div>
     </div>
 
-    <!-- Statistics by Service -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-bold mb-4">Tickets par Service</h2>
-            {% if statsByService is empty %}
-                <p class="text-gray-500">Aucun ticket trouvé.</p>
-            {% else %}
-                <div class="space-y-2">
-                    {% for service, count in statsByService %}
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-700">{{ service }}</span>
-                            <div class="flex items-center gap-2">
-                                <div class="w-40 bg-gray-200 rounded-full h-2">
-                                    <div class="bg-blue-600 h-2 rounded-full" 
-                                         style="width: {% set total = statsByService|length %}{{ (count / (statsByService|reduce((carry, item) => carry + item, 0)) * 100)|round }}%"></div>
-                                </div>
-                                <span class="text-sm font-semibold w-10 text-right">{{ count }}</span>
-                            </div>
-                        </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
+    <div class="stats-monthly">
+        <div class="month-nav">
+            <a href="?month={{ currentMonth-1 < 1 ? 12 : currentMonth-1 }}&year={{ currentMonth-1 < 1 ? currentYear-1 : currentYear }}">◀</a>
+            <span>{{ monthLabel }}</span>
+            <a href="?month={{ currentMonth+1 > 12 ? 1 : currentMonth+1 }}&year={{ currentMonth+1 > 12 ? currentYear+1 : currentYear }}">▶</a>
+            <a href="{{ path('superuser_workflow_stats_export_pdf', {month: currentMonth, year: currentYear}) }}" class="btn-export-pdf">📄 Exporter PDF</a>
         </div>
 
-        <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-xl font-bold mb-4">Tickets par Statut</h2>
-            {% if statsByStatus is empty %}
-                <p class="text-gray-500">Aucun ticket trouvé.</p>
-            {% else %}
-                <div class="space-y-2">
-                    {% for status, count in statsByStatus %}
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-700 capitalize">{{ status|replace({'_': ' '})|capitalize }}</span>
-                            <div class="flex items-center gap-2">
-                                <div class="w-40 bg-gray-200 rounded-full h-2">
-                                    <div class="bg-green-600 h-2 rounded-full" 
-                                         style="width: {% set total = statsByStatus|reduce((carry, item) => carry + item, 0) %}{{ (count / total * 100)|round }}%"></div>
-                                </div>
-                                <span class="text-sm font-semibold w-10 text-right">{{ count }}</span>
-                            </div>
-                        </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
+        <div class="stats-cards">
+            <div class="stat-card">
+                <span class="stat-number">{{ stats.total }}</span>
+                <span class="stat-label">Total Workflows</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">{{ stats.closed }}</span>
+                <span class="stat-label">Clôturés</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">{{ stats.overdue }}</span>
+                <span class="stat-label">En retard</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">{{ stats.sitesProcessed }}</span>
+                <span class="stat-label">Sites traités</span>
+            </div>
         </div>
+    </div>
+
+    <div class="workflow-table-wrap">
+        <table class="workflow-table">
+            <thead>
+                <tr>
+                    <th>Workflow</th>
+                    <th>Sites associés</th>
+                    <th>Action</th>
+                    <th>Users concernés</th>
+                    <th>Statut</th>
+                    <th>Sites traités</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for detail in workflowDetails %}
+                    <tr>
+                        <td><strong>{{ detail.ticket.title }}</strong><br><small>#{{ detail.ticket.id }}</small></td>
+                        <td class="site-list">
+                            {% for site in detail.sites %}
+                                <span>{{ site.siteName }}</span>
+                            {% else %}
+                                -
+                            {% endfor %}
+                        </td>
+                        <td>{{ detail.ticket.actionType ?: '-' }}</td>
+                        <td>{{ detail.users ?: '-' }}</td>
+                        <td><span class="badge badge-{{ detail.ticket.status|replace({'_': '-'}) }}">{{ detail.ticket.status|replace({'_': ' '})|title }}</span></td>
+                        <td>{{ detail.completedSites }} / {{ detail.siteCount }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="6" style="text-align:center;padding:30px;">Aucun workflow pour ce mois.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 {% endblock %}

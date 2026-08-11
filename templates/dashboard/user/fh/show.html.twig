@@ -1,0 +1,307 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<style>
+    .fh-container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; }
+    .card { background: #ffffff; border-radius: 0.75rem; border: 1px solid #e9edf4; padding: 1.25rem; margin-bottom: 1.25rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+    .section-title { font-size: 0.95rem; font-weight: 600; color: #1e293b; margin-bottom: 0.8rem; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+    @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
+    .form-group { margin-bottom: 0.9rem; }
+    .form-label { display: block; font-size: 0.78rem; font-weight: 500; color: #334155; margin-bottom: 0.2rem; }
+    .form-control { width: 100%; border: 1px solid #d1d5db; border-radius: 0.4rem; padding: 0.4rem 0.6rem; font-size: 0.85rem; background: #fff; transition: border-color 0.15s; }
+    .form-control:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    .btn { padding: 0.4rem 1rem; border-radius: 0.4rem; border: none; font-weight: 500; font-size: 0.8rem; cursor: pointer; transition: background 0.15s; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-success:hover { background: #15803d; }
+    .btn-success:disabled { background: #9ca3af; cursor: not-allowed; }
+    .badge-status { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 9999px; font-size: 0.65rem; font-weight: 600; text-transform: capitalize; }
+    .badge-open { background: #dbeafe; color: #1e40af; }
+    .badge-in_progress { background: #fef3c7; color: #92400e; }
+    .badge-completed { background: #d1fae5; color: #065f46; }
+    .badge-closed { background: #e5e7eb; color: #374151; }
+    .badge-blocked { background: #fee2e2; color: #991b1b; }
+    .badge-waiting_superuser { background: #f3e8ff; color: #6b21a5; }
+    .site-btn { padding: 0.4rem 0.8rem; border-radius: 0.4rem; border: 1px solid #d1d5db; background: #fff; cursor: pointer; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 0.4rem; text-decoration: none; color: #1e293b; }
+    .site-btn:hover { background: #f1f5f9; text-decoration: none; color: #1e293b; }
+    .site-btn.active { border-color: #3b82f6; background: #eff6ff; }
+    .site-btn.completed { background: #d1fae5; border-color: #10b981; color: #065f46; cursor: default; opacity: 0.7; pointer-events: none; }
+    .progress-bar { width: 100%; height: 0.5rem; background: #e2e8f0; border-radius: 9999px; overflow: hidden; margin: 0.5rem 0; }
+    .progress-bar .fill { height: 100%; background: #3b82f6; border-radius: 9999px; transition: width 0.3s ease; }
+    .type-badge { display: inline-block; padding: 0.1rem 0.6rem; border-radius: 20px; font-size: 0.65rem; font-weight: 600; background: #e2e8f0; color: #475569; }
+    .type-badge.fh { background: #fef3c7; color: #92400e; }
+    .type-badge.fo { background: #dbeafe; color: #1e40af; }
+</style>
+
+<div class="fh-container">
+    <div class="mb-6">
+        <h1 class="text-xl font-bold text-gray-800">{{ task.title }}</h1>
+        <p class="text-sm text-gray-500">Ticket · {{ task.ticket.title }}</p>
+    </div>
+
+    {# Étapes précédentes #}
+    {% if previousTasks|length > 0 %}
+    <div class="card">
+        <h2 class="section-title">📋 Étapes précédentes</h2>
+        {% for prevTask in previousTasks %}
+            <div class="border-b border-gray-200 py-3">
+                <div class="font-semibold">{{ prevTask.title }}</div>
+                <div class="text-sm text-gray-600">
+                    Effectuée par : {{ prevTask.assignedTo.username|default('Inconnu') }} 
+                    le {{ prevTask.completedAt ? prevTask.completedAt|date('d/m/Y H:i') : '-' }}
+                </div>
+                {% if prevTask.fhFields %}
+                    <div class="text-sm text-gray-500 mt-1">
+                        {% for key, value in prevTask.fhFields %}
+                            {% if value %}
+                                <span class="inline-block mr-2">{{ key|replace({'_': ' '})|capitalize }} : {{ value }}</span>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="grid-2">
+            <div>
+                <p><span class="text-sm text-gray-500">Statut :</span> <span class="badge-status badge-{{ task.ticket.status|replace({'_': ''})|lower }}">{{ task.ticket.status|replace({'_': ' '})|title }}</span></p>
+                <p><span class="text-sm text-gray-500">Deadline :</span> {{ task.ticket.deadline ? task.ticket.deadline|date('d/m/Y') : 'Non définie' }}</p>
+                <p><span class="text-sm text-gray-500">Progression ticket :</span> {{ task.ticket.progress }}%</p>
+            </div>
+            <div>
+                <p><span class="text-sm text-gray-500">Assigné à :</span> {{ task.assignedTo.username|default('N/A') }}</p>
+                <p><span class="text-sm text-gray-500">Priorité :</span> {{ task.ticket.priority|default('Moyenne')|title }}</p>
+                <p><span class="text-sm text-gray-500">Sites traités (cette tâche) :</span> {{ processedSites }}/{{ totalSites }}</p>
+            </div>
+        </div>
+        <div class="progress-bar">
+            <div class="fill" style="width: {{ task.ticket.progress }}%;"></div>
+        </div>
+    </div>
+
+    {# Sélecteur de sites #}
+    <div class="card">
+        <h2 class="section-title">📋 Choisir un site à traiter</h2>
+        <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:1rem;">
+            {% for site in sites %}
+                {% set isProcessed = site.id in processedSiteIds %}
+                <a href="{{ isProcessed ? '#' : path('user_fh_task_show', {id: task.id, site: site.id}) }}"
+                   class="site-btn {% if selectedSite and site.id == selectedSite.id %}active{% endif %} {% if isProcessed %}completed{% endif %}"
+                   {% if isProcessed %}onclick="return false;"{% endif %}>
+                    {% if isProcessed %}✓{% endif %} {{ site.siteName }}
+                    {% if isProcessed %}<span style="font-size:0.65rem; color:#10b981;">(traité)</span>{% endif %}
+                    <span class="type-badge {% if site.typeTrans|upper == 'FH' %}fh{% elseif site.typeTrans|upper == 'FO' %}fo{% endif %}">
+                        {{ site.typeTrans|default('?') }}
+                    </span>
+                </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# Formulaire selon l'étape et le type de site #}
+    {% set isProcessed = selectedSite and selectedSite.id in processedSiteIds %}
+
+    {% if selectedSite and not isProcessed and task.status != 'done' and task.status != 'completed' %}
+        <div class="card">
+            <h2 class="section-title">⚙️ Action pour <span class="font-semibold">{{ selectedSite.siteName }}</span></h2>
+            <form method="post" action="{{ path('user_fh_site_complete', {id: task.id, siteId: selectedSite.id}) }}" enctype="multipart/form-data">
+
+                {# --- CAS FH : formulaire complet --- #}
+                {% if siteType|upper == 'FH' %}
+                    {% if currentStep == constant('App\\Entity\\TicketTask::STEP_FH_ETUDE_PREREQUIS') %}
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label class="form-label">Date étude Prérequis Trans</label>
+                                <input type="date" name="date_etude" class="form-control" value="{{ fhFields.date_etude|default('') }}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Type de support</label>
+                                <select name="type_support" class="form-control">
+                                    <option value="FO" {{ (fhFields.type_support|default('')) == 'FO' ? 'selected' : '' }}>FO</option>
+                                    <option value="FH" {{ (fhFields.type_support|default('')) == 'FH' ? 'selected' : '' }}>FH</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Capacité</label>
+                                <select name="capacite_ok" class="form-control">
+                                    <option value="OK" {{ (fhFields.capacite_ok|default('')) == 'OK' ? 'selected' : '' }}>OK</option>
+                                    <option value="NOK" {{ (fhFields.capacite_ok|default('')) == 'NOK' ? 'selected' : '' }}>NOK</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Upgrade 10GB</label>
+                                <select name="upgrade_10gb" class="form-control">
+                                    <option value="Oui" {{ (fhFields.upgrade_10gb|default('')) == 'Oui' ? 'selected' : '' }}>Oui</option>
+                                    <option value="Non" {{ (fhFields.upgrade_10gb|default('')) == 'Non' ? 'selected' : '' }}>Non</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Fonction Nodale Fibrée</label>
+                                <select name="fonction_nodale" class="form-control">
+                                    <option value="Oui" {{ (fhFields.fonction_nodale|default('')) == 'Oui' ? 'selected' : '' }}>Oui</option>
+                                    <option value="Non" {{ (fhFields.fonction_nodale|default('')) == 'Non' ? 'selected' : '' }}>Non</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Capture (preuve)</label>
+                                <input type="file" name="capture" accept="image/*" class="form-control">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Commentaire Etude Prérequis Trans</label>
+                            <textarea name="commentaire" rows="2" class="form-control">{{ fhFields.commentaire|default('') }}</textarea>
+                        </div>
+
+                    {% elseif currentStep == constant('App\\Entity\\TicketTask::STEP_FH_MAJ_CAPACITE') %}
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label class="form-label">Date MAJ Capacité</label>
+                                <input type="date" name="date_maj_capacite" class="form-control" value="{{ fhFields.date_maj_capacite|default('') }}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Type d'upgrade</label>
+                                <select name="type_upgrade" class="form-control">
+                                    <option value="soft" {{ (fhFields.type_upgrade|default('')) == 'soft' ? 'selected' : '' }}>Soft</option>
+                                    <option value="hard" {{ (fhFields.type_upgrade|default('')) == 'hard' ? 'selected' : '' }}>Hard</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Type de support</label>
+                                <select name="type_support" class="form-control">
+                                    <option value="FO" {{ (fhFields.type_support|default('')) == 'FO' ? 'selected' : '' }}>FO</option>
+                                    <option value="FH" {{ (fhFields.type_support|default('')) == 'FH' ? 'selected' : '' }}>FH</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Commentaire MAJ Capacité</label>
+                            <textarea name="commentaire_maj_capacite" rows="2" class="form-control">{{ fhFields.commentaire_maj_capacite|default('') }}</textarea>
+                        </div>
+
+                    {% elseif currentStep == constant('App\\Entity\\TicketTask::STEP_FH_ING_TRANS_CAP') %}
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label class="form-label">Date MAJ Capacité</label>
+                                <input type="date" name="date_maj_capacite" class="form-control" value="{{ fhFields.date_maj_capacite|default('') }}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Type d'upgrade</label>
+                                <select name="type_upgrade" class="form-control">
+                                    <option value="soft" {{ (fhFields.type_upgrade|default('')) == 'soft' ? 'selected' : '' }}>Soft</option>
+                                    <option value="hard" {{ (fhFields.type_upgrade|default('')) == 'hard' ? 'selected' : '' }}>Hard</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Type de support</label>
+                                <select name="type_support" class="form-control">
+                                    <option value="FO" {{ (fhFields.type_support|default('')) == 'FO' ? 'selected' : '' }}>FO</option>
+                                    <option value="FH" {{ (fhFields.type_support|default('')) == 'FH' ? 'selected' : '' }}>FH</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Commentaire MAJ Capacité</label>
+                            <textarea name="commentaire_maj_capacite" rows="2" class="form-control">{{ fhFields.commentaire_maj_capacite|default('') }}</textarea>
+                        </div>
+
+                    {% elseif currentStep == constant('App\\Entity\\TicketTask::STEP_FH_MLO') %}
+                        <div class="form-group">
+                            <label class="form-label">Confirmation MLO</label>
+                            <textarea name="mlo_confirmation" rows="2" class="form-control">{{ fhFields.mlo_confirmation|default('MLO OK') }}</textarea>
+                        </div>
+
+                    {% elseif currentStep == constant('App\\Entity\\TicketTask::STEP_FH_LLD') %}
+                        <div class="form-group">
+                            <label class="form-label">Résultat LLD</label>
+                            <textarea name="lld_result" rows="2" class="form-control">{{ fhFields.lld_result|default('LLD OK') }}</textarea>
+                        </div>
+
+                    {% elseif currentStep == constant('App\\Entity\\TicketTask::STEP_FH_EXECUTION_WO') %}
+                        <div class="form-group">
+                            <label class="form-label">Date Exécution WO</label>
+                            <input type="date" name="date_execution_wo" class="form-control" value="{{ fhFields.date_execution_wo|default('') }}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Commentaire Exécution WO</label>
+                            <textarea name="commentaire_execution_wo" rows="2" class="form-control">{{ fhFields.commentaire_execution_wo|default('') }}</textarea>
+                        </div>
+                    {% endif %}
+
+                {# --- CAS FO : formulaire simplifié OK/NOK --- #}
+                {% elseif siteType|upper == 'FO' %}
+                    <div class="form-group">
+                        <label class="form-label">Décision d'étude de conception</label>
+                        <select name="faisabilite_ok" class="form-control" required>
+                            <option value="OK">✅ OK — Conception validée</option>
+                            <option value="NOK">❌ NOK — À revoir</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Commentaire (optionnel)</label>
+                        <textarea name="commentaire" rows="3" class="form-control">{{ fhFields.commentaire|default('') }}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Capture (preuve)</label>
+                        <input type="file" name="capture" accept="image/*" class="form-control">
+                    </div>
+
+                {# --- Autres cas (fallback) --- #}
+                {% else %}
+                    <div class="form-group">
+                        <label class="form-label">Décision</label>
+                        <select name="decision" class="form-control">
+                            <option value="OK">OK</option>
+                            <option value="NOK">NOK</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Commentaire</label>
+                        <textarea name="commentaire" rows="3" class="form-control"></textarea>
+                    </div>
+                {% endif %}
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-success">✅ Valider ce site</button>
+                </div>
+            </form>
+        </div>
+    {% elseif selectedSite and isProcessed %}
+        <div class="card">
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4 text-green-700 text-center">
+                ✅ Ce site a déjà été traité pour cette tâche.
+            </div>
+        </div>
+    {% elseif task.status == 'done' or task.status == 'completed' %}
+        <div class="card">
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-blue-700 text-center">
+                ✅ Cette tâche est déjà terminée.
+            </div>
+        </div>
+    {% else %}
+        <div class="card">
+            <p class="text-sm text-gray-500">Aucun site à traiter pour ce ticket.</p>
+        </div>
+    {% endif %}
+
+    {# Historique #}
+    <div class="card">
+        <h2 class="section-title">📜 Historique</h2>
+        <div style="padding-left:1.25rem; position:relative;">
+            {% for entry in history %}
+                <div style="margin-bottom:1rem; padding-left:0.3rem; position:relative;">
+                    <div style="font-size:0.65rem; color:#94a3b8;">{{ entry.createdAt ? entry.createdAt|date('d/m/Y H:i') : '-' }}</div>
+                    <div style="font-weight:600; color:#1e293b; font-size:0.85rem;">{{ entry.action|replace({'_': ' '})|title }}</div>
+                    {% if entry.details %}
+                        <div style="font-size:0.8rem; color:#475569;">{{ entry.details }}</div>
+                    {% endif %}
+                </div>
+            {% else %}
+                <p class="text-sm text-gray-500">Aucun historique.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

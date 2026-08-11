@@ -1,145 +1,264 @@
 {% extends 'dashboard/base_dashboard.html.twig' %}
 
 {% block dashboard_content %}
-<div class="container mx-auto p-6">
-    <h1 class="text-2xl font-bold mb-4">{{ task.title }}</h1>
-    <p><strong>Ticket :</strong> {{ task.ticket.title }}</p>
-    <p><strong>Description :</strong> {{ task.description|default('-') }}</p>
-
-    <form method="post" action="{{ path('user_task_complete', {id: task.id}) }}">
-        <div class="overflow-x-auto mt-6">
-            <table class="min-w-full bg-white border">
-                <thead>
-                    <tr class="bg-gray-100">
-                        <th class="px-4 py-2 border">Site</th>
-                        <th class="px-4 py-2 border">Type</th>
-                        <th class="px-4 py-2 border">Action requise</th>
-                        <th class="px-4 py-2 border">Planification (date)</th>
-                        <th class="px-4 py-2 border">Description de l'action</th>
-                        <th class="px-4 py-2 border">Coordination des ressources</th>
-                        <th class="px-4 py-2 border">Statut</th>
-                        <th class="px-4 py-2 border">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for ts in task.ticket.ticketSites %}
-                        {% set siteData = task.siteData[ts.id] ?? null %}
-                        <tr class="site-row" data-site-id="{{ ts.id }}">
-                            <td class="px-4 py-2 border">{{ ts.siteName }} ({{ ts.typeTrans }})</td>
-                            <td class="px-4 py-2 border">{{ ts.typeTrans }}</td>
-                            <td class="px-4 py-2 border">
-                                {% if task.stepCode == 'deploiement_fo' %}
-                                    Action finale (WO IP)
-                                {% elseif task.stepCode == 'deploiement_2eme_paire' %}
-                                    Raccordement 2ème paire FO
-                                {% else %}
-                                    {{ task.title }}
-                                {% endif %}
-                            </td>
-                            <td class="px-4 py-2 border">
-                                <input type="date" name="planification[{{ ts.id }}]" class="border rounded p-1 w-full" value="{{ siteData.planification ?? '' }}">
-                            </td>
-                            <td class="px-4 py-2 border">
-                                <textarea name="description[{{ ts.id }}]" rows="2" class="border rounded p-1 w-full">{{ siteData.description ?? '' }}</textarea>
-                            </td>
-                            <td class="px-4 py-2 border">
-                                <div>
-                                    <label><input type="checkbox" name="radio_ok[{{ ts.id }}]" value="1" {% if siteData.radio_ok %}checked{% endif %}> Support Radio OK</label>
-                                </div>
-                                <div>
-                                    <label><input type="checkbox" name="backhaul_ok[{{ ts.id }}]" value="1" {% if siteData.backhaul_ok %}checked{% endif %}> Support Backhaul OK</label>
-                                </div>
-                                <div>
-                                    <label><input type="checkbox" name="terrain_ok[{{ ts.id }}]" value="1" {% if siteData.terrain_ok %}checked{% endif %}> Accès terrain validé</label>
-                                </div>
-                            </td>
-                            <td class="px-4 py-2 border">
-                                {% if siteData.statut %}
-                                    <span class="badge {{ siteData.statut == 'fait' ? 'green' : 'orange' }}">
-                                        {{ siteData.statut == 'fait' ? 'Action réalisée' : 'En attente' }}
-                                    </span>
-                                {% else %}
-                                    <span class="badge orange">Non démarré</span>
-                                {% endif %}
-                            </td>
-                            <td class="px-4 py-2 border text-center">
-                                <button type="button" class="save-site-btn bg-blue-600 text-white px-2 py-1 rounded text-sm" data-site-id="{{ ts.id }}">Enregistrer</button>
-                                <button type="button" class="submit-site-btn bg-green-600 text-white px-2 py-1 rounded text-sm mt-1" data-site-id="{{ ts.id }}">Action réalisée</button>
-                            </td>
-                         </tr>
-                    {% endfor %}
-                </tbody>
-             </table>
-        </div>
-
-        <div class="mt-6 text-center">
-            <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded" id="submitAll" disabled>Valider toutes les actions</button>
-            <a href="{{ path('user_tasks_dashboard') }}" class="ml-2 bg-gray-500 text-white px-6 py-2 rounded">Retour</a>
-        </div>
-    </form>
-</div>
-
-<script>
-    // Sauvegarde individuelle des données du site (AJAX)
-    async function saveSiteData(siteId, formData) {
-        const response = await fetch(`{{ path('user_deploiement_site_data', {taskId: task.id, siteId: '__SITE_ID__'}) }}`.replace('__SITE_ID__', siteId), {
-            method: 'POST',
-            body: formData
-        });
-        return response.ok;
-    }
-
-    document.querySelectorAll('.save-site-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const row = btn.closest('.site-row');
-            const siteId = row.dataset.siteId;
-            const formData = new FormData();
-            formData.append('planification', row.querySelector('input[name^="planification"]').value);
-            formData.append('description', row.querySelector('textarea[name^="description"]').value);
-            formData.append('radio_ok', row.querySelector('input[name^="radio_ok"]').checked ? '1' : '0');
-            formData.append('backhaul_ok', row.querySelector('input[name^="backhaul_ok"]').checked ? '1' : '0');
-            formData.append('terrain_ok', row.querySelector('input[name^="terrain_ok"]').checked ? '1' : '0');
-            const ok = await saveSiteData(siteId, formData);
-            if (ok) {
-                btn.textContent = '✅ Enregistré';
-                setTimeout(() => btn.textContent = 'Enregistrer', 2000);
-            } else {
-                alert('Erreur lors de l\'enregistrement.');
-            }
-        });
-    });
-
-    // Soumission individuelle pour marquer l'action comme réalisée
-    document.querySelectorAll('.submit-site-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            if (!confirm('Confirmez-vous que l\'action pour ce site est entièrement réalisée ?')) return;
-            const row = btn.closest('.site-row');
-            const siteId = row.dataset.siteId;
-            const formData = new FormData();
-            formData.append('action_realisee', '1');
-            const ok = await saveSiteData(siteId, formData);
-            if (ok) {
-                btn.textContent = '✅ Terminé';
-                btn.disabled = true;
-                // Recharger la page pour mettre à jour le statut
-                location.reload();
-            } else {
-                alert('Erreur lors de la validation.');
-            }
-        });
-    });
-
-    // Vérifier si tous les sites ont l'action réalisée pour activer le bouton global
-    function updateGlobalButton() {
-        const allDone = Array.from(document.querySelectorAll('.submit-site-btn')).every(btn => btn.disabled === true);
-        document.getElementById('submitAll').disabled = !allDone;
-    }
-    updateGlobalButton();
-</script>
-
 <style>
-    .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-    .badge.green { background: #f0fdf4; color: #15803d; }
-    .badge.orange { background: #fff7ed; color: #c2410c; }
+    .deploiement-container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; }
+    .card { background:#fff; border-radius:.75rem; border:1px solid #e9edf4; padding:1.25rem; margin-bottom:1.25rem; }
+    .section-title { font-size:.95rem; font-weight:600; color:#1e293b; margin-bottom:.8rem; }
+    .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; }
+    @media (max-width:640px) { .grid-2 { grid-template-columns:1fr; } }
+    .form-group { margin-bottom:.9rem; }
+    .form-label { display:block; font-size:.78rem; font-weight:500; color:#334155; margin-bottom:.2rem; }
+    .form-control { width:100%; border:1px solid #d1d5db; border-radius:.4rem; padding:.4rem .6rem; font-size:.85rem; background:#fff; }
+    .form-control:focus { outline:none; border-color:#2e75b6; }
+    .btn-success { padding:.5rem 1.2rem; border-radius:.4rem; border:none; font-weight:600; cursor:pointer; background:#16a34a; color:#fff; }
+    .btn-success:hover { background:#15803d; }
+    .btn-success:disabled { background:#9ca3af; cursor:not-allowed; }
+    .site-btn { padding:.4rem .8rem; border-radius:.4rem; border:1px solid #d1d5db; background:#fff; cursor:pointer; font-size:.85rem; display:inline-flex; align-items:center; gap:.4rem; text-decoration:none; color:#1e293b; }
+    .site-btn:hover { background:#f1f5f9; }
+    .site-btn.active { border-color:#2e75b6; background:#eff6ff; }
+    .site-btn.completed { background:#d1fae5; border-color:#10b981; color:#065f46; cursor:default; opacity:.75; pointer-events:none; }
+    .progress-bar { width:100%; height:.5rem; background:#e2e8f0; border-radius:9999px; overflow:hidden; margin:.5rem 0; }
+    .progress-bar .fill { height:100%; background:#2e75b6; }
+    .badge-status { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 9999px; font-size: 0.65rem; font-weight: 600; text-transform: capitalize; }
+    .badge-open { background: #dbeafe; color: #1e40af; }
+    .badge-in_progress { background: #fef3c7; color: #92400e; }
+    .badge-completed { background: #d1fae5; color: #065f46; }
+    .badge-closed { background: #e5e7eb; color: #374151; }
+    .badge-blocked { background: #fee2e2; color: #991b1b; }
+    .badge-waiting_superuser { background: #f3e8ff; color: #6b21a5; }
+    .checkbox-group { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .checkbox-group label { display: flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; }
+    .info-box { background: #f0f4ff; border-left: 4px solid #2e75b6; padding: 0.8rem 1rem; border-radius: 0.4rem; margin-bottom: 1rem; color: #1e293b; }
+    .info-box strong { color: #2e75b6; }
+    .warning-box { background: #fff3cd; border-left: 4px solid #ffc107; padding: 0.8rem 1rem; border-radius: 0.4rem; margin-bottom: 1rem; }
+
+    .btn-back-rose {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: #ec4899;
+        color: #fff;
+        padding: 0.5rem 1.2rem;
+        border-radius: 40px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        border: none;
+        text-decoration: none;
+        transition: background 0.2s, transform 0.1s;
+        box-shadow: 0 4px 10px rgba(236, 72, 153, 0.25);
+        margin-bottom: 1rem;
+    }
+    .btn-back-rose:hover {
+        background: #db2777;
+        color: #fff;
+        text-decoration: none;
+        transform: translateY(-1px);
+    }
 </style>
+
+<div class="deploiement-container">
+    <a href="{{ path('user_deploiement_index') }}" class="btn-back-rose">← Retour à mes tâches</a>
+
+    <h1 class="text-xl font-bold">{{ task.title }}</h1>
+    <p class="text-sm text-gray-500 mb-4">Ticket · {{ ticket.title }} — Étape : {{ task.stepCode|replace({'_': ' '})|capitalize }}</p>
+
+    <div class="card">
+        <div class="grid-2">
+            <div><span class="text-sm text-gray-500">Statut :</span> <span class="badge-status badge-{{ task.status|replace({'_': ''})|lower }}">{{ task.status|replace({'_': ' '})|capitalize }}</span></div>
+            <div><span class="text-sm text-gray-500">Progression ticket :</span> {{ ticket.progress }}%</div>
+        </div>
+        <div class="progress-bar"><div class="fill" style="width: {{ ticket.progress }}%;"></div></div>
+    </div>
+
+    <div class="card">
+        <h2 class="section-title">📋 Sites à traiter ({{ totalSites }})</h2>
+        <div class="flex flex-wrap gap-2">
+            {% for site in sites %}
+                {% set decision = siteDecisions[site.id] ?? null %}
+                <a href="{{ decision ? '#' : path('user_deploiement_task_show', {id: task.id, site: site.id}) }}"
+                   class="site-btn {% if selectedSite and site.id == selectedSite.id %}active{% endif %} {% if decision %}completed{% endif %}"
+                   {% if decision %}onclick="return false;"{% endif %}>
+                    {% if decision %}✓{% endif %} {{ site.siteName }}
+                </a>
+            {% else %}
+                <span class="text-gray-400">Aucun site</span>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% set selectedDecision = selectedSite ? siteDecisions[selectedSite.id] ?? null : null %}
+
+    {# ========== CAS: Création WO IP ========== #}
+    {% if isCreationWoIp %}
+        <div class="card">
+            <div class="warning-box">
+                <strong>⚠️ Attention :</strong> Cette tâche de <strong>Création WO IP</strong> est gérée par le département <strong>Ingénierie IP</strong>.
+                Vous ne pouvez pas effectuer d'action sur cette étape.
+            </div>
+            <a href="{{ path('user_deploiement_index') }}" class="btn btn-secondary">Retour à mes tâches</a>
+        </div>
+
+    {# ========== CAS: Planification standard ========== #}
+    {% elseif isPlanification and selectedSite and not selectedDecision and task.status not in ['done', 'completed'] %}
+        {# Si c'est un hard upgrade FH, on affiche le formulaire MLO #}
+        {% if isHardUpgrade %}
+            <div class="card">
+                <h2 class="section-title">⚙️ Validation MLO pour <strong>{{ selectedSite.siteName }}</strong></h2>
+                <div class="info-box">
+                    <strong>📋 Valider le MLO pour l'upgrade Hard FH.</strong>
+                </div>
+                <form method="post" action="{{ path('user_deploiement_site_decision', {id: task.id, siteId: selectedSite.id}) }}">
+                    <div class="form-group">
+                        <label class="form-label">Décision MLO</label>
+                        <select name="mlo_decision" class="form-control" required>
+                            <option value="OK">✅ OK — MLO réalisé avec succès</option>
+                            <option value="NOK">❌ NOK — Problème MLO</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Commentaire</label>
+                        <textarea name="comment" rows="3" class="form-control"></textarea>
+                    </div>
+                    <button type="submit" class="btn-success">✅ Valider la décision MLO</button>
+                </form>
+            </div>
+        {% else %}
+            {# Planification standard (FO, FH soft, raccordement, etc.) #}
+            <div class="card">
+                <h2 class="section-title">⚙️ Planification pour <strong>{{ selectedSite.siteName }}</strong></h2>
+                <div class="info-box">
+                    <strong>📋 Planifier l'intervention et coordonner avec les supports.</strong>
+                </div>
+                <form method="post" action="{{ path('user_deploiement_site_decision', {id: task.id, siteId: selectedSite.id}) }}">
+                    <div class="form-group">
+                        <label class="form-label">Date de planification</label>
+                        <input type="date" name="planification" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Coordination avec les supports</label>
+                        <div class="checkbox-group">
+                            <label><input type="checkbox" name="radio_ok" value="1"> Support Radio</label>
+                            <label><input type="checkbox" name="backhaul_ok" value="1"> Support Backhaul</label>
+                        </div>
+                        <p class="text-xs text-gray-500">Cochez les supports concernés, puis validez pour leur transmettre la demande.</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Commentaire</label>
+                        <textarea name="comment" rows="3" class="form-control"></textarea>
+                    </div>
+                    <button type="submit" class="btn-success">✅ Envoyer aux supports</button>
+                </form>
+            </div>
+        {% endif %}
+
+    {# ========== CAS: Exécution ========== #}
+    {% elseif isExecution and selectedSite and not selectedDecision and task.status not in ['done', 'completed'] %}
+        <div class="card">
+            <h2 class="section-title">⚙️ Validation de l'exécution pour <strong>{{ selectedSite.siteName }}</strong></h2>
+            <div class="info-box">
+                <strong>✅ Les supports ont validé. Confirmez l'action sur le terrain.</strong>
+            </div>
+            <form method="post" action="{{ path('user_deploiement_site_decision', {id: task.id, siteId: selectedSite.id}) }}">
+                <div class="form-group">
+                    <label class="form-label">Décision</label>
+                    <select name="decision" class="form-control">
+                        <option value="OK">✅ OK — Action réalisée avec succès</option>
+                        <option value="NOK">❌ NOK — Problème rencontré</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Commentaire</label>
+                    <textarea name="comment" rows="3" class="form-control"></textarea>
+                </div>
+                <button type="submit" class="btn-success">✅ Valider l'exécution</button>
+            </form>
+        </div>
+
+    {# ========== CAS: Swap routeur ========== #}
+    {% elseif isSwap and selectedSite and not selectedDecision and task.status not in ['done', 'completed'] %}
+        <div class="card">
+            <h2 class="section-title">⚙️ Swap routeur pour <strong>{{ selectedSite.siteName }}</strong></h2>
+            <div class="info-box">
+                <strong>🔄 Confirmez que le swap routeur a été effectué.</strong>
+            </div>
+            <form method="post" action="{{ path('dashboard_fo_complete_swap', {id: task.id}) }}">
+                <div class="form-group">
+                    <label class="form-label">Swap effectué</label>
+                    <div class="checkbox-group">
+                        <label><input type="checkbox" name="decision" value="OK"> ✅ Swap done</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Commentaire</label>
+                    <textarea name="comment" rows="3" class="form-control"></textarea>
+                </div>
+                <button type="submit" class="btn-success">✅ Valider le swap</button>
+            </form>
+        </div>
+
+    {# ========== CAS: Raccordement 2ème paire ========== #}
+    {% elseif isRaccordement and selectedSite and not selectedDecision and task.status not in ['done', 'completed'] %}
+        <div class="card">
+            <h2 class="section-title">⚙️ Raccordement 2ème paire pour <strong>{{ selectedSite.siteName }}</strong></h2>
+            <div class="info-box">
+                <strong>📋 Raccordement FO demandé par Ingénierie Capillaire.</strong>
+            </div>
+            <form method="post" action="{{ path('user_deploiement_site_decision', {id: task.id, siteId: selectedSite.id}) }}">
+                <div class="form-group">
+                    <label class="form-label">Date de planification</label>
+                    <input type="date" name="planification" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Raccordement FO</label>
+                    <select name="raccordement_ok" class="form-control">
+                        <option value="OK">✅ OK — Raccordement réussi</option>
+                        <option value="NOK">❌ NOK — Échec</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Commentaire</label>
+                    <textarea name="comment" rows="3" class="form-control"></textarea>
+                </div>
+                <button type="submit" class="btn-success">✅ Valider le raccordement</button>
+            </form>
+        </div>
+
+    {# ========== Site déjà traité ========== #}
+    {% elseif selectedSite and selectedDecision %}
+        <div class="card">
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4 text-green-700 text-center">
+                ✅ Site déjà traité
+                {% set comment = selectedDecision.execution_comment ?? selectedDecision.comment ?? null %}
+                {% if comment %}<br><span class="text-sm">Commentaire : {{ comment }}</span>{% endif %}
+            </div>
+        </div>
+
+    {# ========== Tâche déjà terminée ========== #}
+    {% elseif task.status == 'done' or task.status == 'completed' %}
+        <div class="card">
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-blue-700 text-center">✅ Cette tâche est déjà terminée.</div>
+        </div>
+
+    {# ========== Aucune action ========== #}
+    {% else %}
+        <div class="card">
+            <div class="info-box"><p>Aucune action spécifique pour cette étape.</p></div>
+        </div>
+    {% endif %}
+
+    {# Historique #}
+    <div class="card">
+        <h2 class="section-title">📜 Historique</h2>
+        {% for entry in ticket.history %}
+            <div class="mb-2">
+                <span class="text-xs text-gray-400">{{ entry.createdAt ? entry.createdAt|date('d/m/Y H:i') : '-' }}</span>
+                <strong>{{ entry.action|replace({'_': ' '})|capitalize }}</strong>
+                <span class="text-sm text-gray-600">{{ entry.details }}</span>
+            </div>
+        {% else %}
+            <p class="text-gray-400">Aucun historique.</p>
+        {% endfor %}
+    </div>
+</div>
 {% endblock %}

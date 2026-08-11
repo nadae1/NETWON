@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Entity\User;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -39,28 +40,57 @@ class AuthSecurityController extends AbstractController
     }
 
     private function redirectUserAfterLogin(): Response
-{
-    if ($this->isGranted('ROLE_ADMIN')) {
-        return $this->redirectToRoute('admin_dashboard_home');
-    }
-    if ($this->isGranted('ROLE_SUPERUSER')) {
-        return $this->redirectToRoute('superuser_dashboard_home');
-    }
-    // Utilisateur standard
-    /** @var User $user */
-    $user = $this->getUser();
-    $service = $user->getService();
-    
-    return match ($service) {
-        'IP' => $this->redirectToRoute('user_ip_dashboard'),
-        'TRANSMISSION' => $this->redirectToRoute('user_transmission_tickets'),
-        'DEPLOIEMENT' => $this->redirectToRoute('user_deploiement_tickets'),
-        'INGENIERIE_CAPILLAIRE' => $this->redirectToRoute('user_capillaire_tickets'),
-        'RADIO' => $this->redirectToRoute('user_radio_tickets'),
-        'BACKHAUL' => $this->redirectToRoute('user_backhaul_tickets'),
-        'DEPLOIEMENT_TELECOM' => $this->redirectToRoute('user_deploiement_telecom_tickets'),
-        default => $this->redirectToRoute('user_dashboard_home'),
-    };
-}
+    {
+        /** @var User $user */
+        $user = $this->getUser();
 
+        // Vérifier d'abord les rôles (priorité)
+        if (in_array('ROLE_SUPERUSER', $user->getRoles(), true)) {
+            return $this->redirectToRoute('superuser_workflow_index');
+        }
+
+        if (in_array('ROLE_CONTROLLER', $user->getRoles(), true)) {
+            return $this->redirectToRoute('controller_dashboard_home');
+        }
+
+        if (in_array('ROLE_ADMIN', $user->getRoles(), true)) {
+            return $this->redirectToRoute('admin_workflow_index');
+        }
+
+        // Si l'utilisateur n'a pas de service, rediriger vers le dashboard générique
+        if (!$user->getService()) {
+            return $this->redirectToRoute('user_tasks_dashboard');
+        }
+
+        $service = strtoupper($user->getService());
+        $department = $user->getDepartment() ?? '';
+
+        // Redirection selon le service
+        if ($service === 'FO') {
+            return $this->redirectToRoute('dashboard_fo_index');
+        }
+
+        if ($service === 'FH') {
+            return $this->redirectToRoute('user_fh_tasks');
+        }
+
+        // Service DEPLOIEMENT – redirection vers le bon département
+        if ($service === 'DEPLOIEMENT') {
+            if ($department === 'support_radio') {
+                return $this->redirectToRoute('user_support_radio_index');
+            }
+            if ($department === 'support_backhaul') {
+                return $this->redirectToRoute('user_support_backhaul_index');
+            }
+            // Par défaut, Déploiement Télécom
+            return $this->redirectToRoute('user_deploiement_index');
+        }
+
+        if ($service === 'SHARED') {
+            return $this->redirectToRoute('user_tasks_dashboard');
+        }
+
+        // Fallback
+        return $this->redirectToRoute('user_tasks_dashboard');
+    }
 }

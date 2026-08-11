@@ -1,4 +1,5 @@
 <?php
+// src/Service/WorkflowEngineService.php
 
 namespace App\Service;
 
@@ -12,7 +13,8 @@ class WorkflowEngineService
 {
     public function __construct(
         private EntityManagerInterface $em,
-        private NotificationService $notificationService
+        private NotificationService $notificationService,
+        private TicketWorkflowService $ticketWorkflowService
     ) {}
 
     public function startTask(TicketTask $task, User $user): void
@@ -20,14 +22,14 @@ class WorkflowEngineService
         $task->setStatus(TicketTask::STATUS_IN_PROGRESS);
         $task->setStartedAt(new \DateTime());
         $task->setUpdatedAt(new \DateTime());
-        
+
         $this->addHistory(
             $task->getTicket(),
             $user,
             'task_started',
             'La tâche #' . $task->getId() . ' a été démarrée par ' . $user->getUsername()
         );
-        
+
         $this->em->flush();
     }
 
@@ -39,22 +41,18 @@ class WorkflowEngineService
         $task->setStatus(TicketTask::STATUS_DONE);
         $task->setCompletedAt(new \DateTime());
         $task->setUpdatedAt(new \DateTime());
-        
+
         $this->addHistory(
             $task->getTicket(),
             $user,
             'task_completed',
             sprintf('Tâche terminée. Décision: %s. Commentaire: %s', $decision, $comment ?? 'aucun')
         );
-        
+
         $this->refreshTicketProgress($task->getTicket());
         $this->em->flush();
     }
 
-    /**
-     * Complète une tâche avec validation du site (pour workflows multi-sites)
-     * et crée automatiquement la tâche suivante pour l'utilisateur suivant
-     */
     public function completeTaskWithSiteValidation(
         TicketTask $task,
         User $currentUser,
@@ -65,7 +63,6 @@ class WorkflowEngineService
     ): void {
         $ticket = $task->getTicket();
 
-        // Marquer la tâche comme complétée
         $task->setDecision($decision);
         $task->setComment($comment);
         $task->setProofFile($proofFile);
@@ -74,7 +71,6 @@ class WorkflowEngineService
         $task->setCompletedAt(new \DateTime());
         $task->setUpdatedAt(new \DateTime());
 
-        // Ajouter un historique
         $historyMessage = sprintf(
             'Tâche terminée. Décision: %s.%s%s',
             $decision,
@@ -83,38 +79,22 @@ class WorkflowEngineService
         );
 
         $this->addHistory($ticket, $currentUser, 'task_completed', $historyMessage);
-
-        // Mettre à jour la progression du ticket
         $this->refreshTicketProgress($ticket);
 
-        // Créer la tâche suivante si applicable
         $nextStepInfo = $this->getNextStepInfo($task, $decision);
         if ($nextStepInfo) {
+            // createTask() se charge maintenant d'envoyer la notification/email
             $nextTask = $this->createTask(
                 $ticket,
                 $nextStepInfo['user'],
                 $nextStepInfo['title'],
                 $nextStepInfo['description'],
-                $nextStepInfo['stepCode']
+                $nextStepInfo['stepCode'],
+                $task->getSiteData()
             );
 
-            // Enregistrer l'utilisateur suivant dans la tâche actuelle
             $task->setNextAssignedTo($nextStepInfo['user']);
-
-            // Notifier l'utilisateur suivant
-            $this->notificationService->notify(
-                $nextStepInfo['user'],
-                'task_assigned',
-                sprintf(
-                    'Nouvelle tâche : %s pour le ticket #%d - %s',
-                    $nextStepInfo['title'],
-                    $ticket->getId(),
-                    $ticket->getTitle()
-                ),
-                $ticket
-            );
         } else {
-            // Aucune étape suivante, marquer le ticket comme complété
             $ticket->setStatus('completed');
             $this->addHistory($ticket, $currentUser, 'workflow_completed', 'Workflow complètement terminé');
         }
@@ -122,29 +102,39 @@ class WorkflowEngineService
         $this->em->flush();
     }
 
-
     public function createInitialFhTask(Ticket $ticket, User $assignedTo): void
-{
-    $task = new TicketTask();
-    $task->setTicket($ticket);
-    $task->setTitle('Étude des prérequis FH');
-    $task->setDescription('Compléter l\'étude des prérequis transmission');
-    $task->setAssignedTo($assignedTo);
-    $task->setStatus('pending');
-    $task->setStepOrder(1);
-    $task->setStepCode(TicketTask::STEP_FH_ETUDE_PREREQUIS);
-    $task->setServiceName($assignedTo->getService());
-    $this->em->persist($task);
-}
+    {
+        $task = new TicketTask();
+        $task->setTicket($ticket);
+        $task->setTitle('Étude des prérequis FH');
+        $task->setDescription('Compléter l\'étude des prérequis transmission');
+        $task->setAssignedTo($assignedTo);
+        $task->setStatus('pending');
+        $task->setStepOrder(1);
+        $task->setStepCode(TicketTask::STEP_FH_ETUDE_PREREQUIS);
+        $task->setServiceName($assignedTo->getService());
+        $this->em->persist($task);
 
-    /**
-     * Détermine l'étape suivante et l'utilisateur cible
-     */
+        $this->notificationService->notify(
+            $assignedTo,
+            NotificationService::TYPE_WORKFLOW_ASSIGNED,
+            sprintf(
+                'Nouvelle tâche : %s pour le ticket #%d - %s',
+                $task->getTitle(),
+                $ticket->getId() ?? 0,
+                $ticket->getTitle()
+            ),
+            $ticket
+        );
+
+        $this->em->flush();
+    }
+
     private function getNextStepInfo(TicketTask $task, string $decision): ?array
     {
         $stepCode = $task->getStepCode();
 
-        if ($stepCode === 'engineering_ip') {
+        if ($stepCode === 'engineering_ip' || $stepCode === 'initial_analysis') {
             if ($decision === 'ok') {
                 $nextUser = $this->findUserByDepartmentOrService('deploiement', 'DEPLOIEMENT');
                 return $nextUser ? [
@@ -232,12 +222,12 @@ class WorkflowEngineService
     public function choicesFor(TicketTask $task): array
     {
         $stepCode = $task->getStepCode();
-        
+
         $choices = [
             '✅ OK - Action réalisée avec succès' => 'ok',
             '❌ NOK - Action non réalisée' => 'nok',
         ];
-        
+
         if ($stepCode === 'analyse_complementaire') {
             $choices = [
                 '🔧 Besoin 2ème paire FO' => 'besoin_fo',
@@ -245,47 +235,65 @@ class WorkflowEngineService
                 '✅ OK - Pas d\'action supplémentaire' => 'ok',
             ];
         }
-        
-        if ($stepCode === 'engineering_ip') {
+
+        if ($stepCode === 'engineering_ip' || $stepCode === 'initial_analysis') {
             $choices = [
                 '✅ IP OK - Générer WO' => 'ok',
                 '❌ IP NOK - Besoin 2ème paire FO' => 'besoin_fo',
                 '🔄 IP NOK - Besoin swap routeur' => 'swap_routeur',
             ];
         }
-        
+
         return $choices;
     }
 
-   public function createInitialIpTask(Ticket $ticket, User $assignedUser): TicketTask
-{
-    $site = $ticket->getTicketSites()->first();
-    $typeTrans = $site ? strtoupper($site->getTypeTrans() ?? '') : '';
-    
-    $task = new TicketTask();
-    $task->setTicket($ticket);
-    $task->setAssignedTo($assignedUser);
-    $task->setServiceName($assignedUser->getService());
-    $task->setDepartmentName($assignedUser->getDepartment());
-    $task->setStatus(TicketTask::STATUS_PENDING);
-    $task->setCreatedAt(new \DateTime());
-    $task->setUpdatedAt(new \DateTime());
+    public function createInitialIpTask(Ticket $ticket, User $assignedUser, array $sites = []): TicketTask
+    {
+        $service = strtoupper($assignedUser->getService() ?? '');
 
-    if (str_contains($typeTrans, 'FH')) {
-        $task->setTitle('Étude des prérequis FH');
-        $task->setDescription('Compléter l\'étude des prérequis transmission FH');
-        $task->setStepCode(TicketTask::STEP_FH_ETUDE_PREREQUIS);
-    } else {
-        $task->setTitle('Étude initiale IP');
-        $task->setDescription('Analyser la demande et décider OK / NOK.');
-        $task->setStepCode('engineering_ip');
+        $task = new TicketTask();
+        $task->setTicket($ticket);
+        $task->setAssignedTo($assignedUser);
+        $task->setServiceName($assignedUser->getService());
+        $task->setDepartmentName($assignedUser->getDepartment());
+        $task->setStatus(TicketTask::STATUS_PENDING);
+        $task->setCreatedAt(new \DateTime());
+        $task->setUpdatedAt(new \DateTime());
+        $task->setSiteData(array_map(fn($s) => $s->getId(), $sites));
+
+        if ($service === 'FH') {
+            $task->setTitle('Étude des prérequis FH');
+            $task->setDescription('Compléter l\'étude des prérequis transmission FH');
+            $task->setStepCode(TicketTask::STEP_FH_ETUDE_PREREQUIS);
+        } elseif ($service === 'IP') {
+            $task->setTitle('Étude initiale IP');
+            $task->setDescription('Analyser la demande et décider OK / NOK.');
+            $task->setStepCode('engineering_ip');
+        } else {
+            $task->setTitle('Étude initiale ' . $service);
+            $task->setDescription('Analyser la demande et décider OK / NOK.');
+            $task->setStepCode('initial_analysis');
+        }
+
+        $this->em->persist($task);
+
+        $this->notificationService->notify(
+            $assignedUser,
+            NotificationService::TYPE_WORKFLOW_ASSIGNED,
+            sprintf(
+                'Nouvelle tâche : %s pour le ticket #%d - %s',
+                $task->getTitle(),
+                $ticket->getId() ?? 0,
+                $ticket->getTitle()
+            ),
+            $ticket
+        );
+
+        $this->em->flush();
+
+        return $task;
     }
 
-    $this->em->persist($task);
-    $this->em->flush();
-
-    return $task;
-}
     public function completeTaskAndMoveNext(TicketTask $task, User $user, string $decision = 'ok'): void
     {
         $ticket = $task->getTicket();
@@ -308,45 +316,46 @@ class WorkflowEngineService
             $this->moveNext($ticket, $task, $decision);
             $this->refreshTicketProgress($ticket);
         }
-        
+
         $this->em->flush();
     }
 
     private function moveNext(Ticket $ticket, TicketTask $task, string $decision): void
     {
         $stepCode = $task->getStepCode();
+        $siteData = $task->getSiteData();
 
-        if ($stepCode === 'engineering_ip') {
+        if ($stepCode === 'engineering_ip' || $stepCode === 'initial_analysis') {
             if ($decision === 'ok') {
                 $nextUser = $this->findUserByDepartmentOrService('deploiement', 'DEPLOIEMENT');
                 if ($nextUser) {
                     $this->createTask(
-                        $ticket,
-                        $nextUser,
+                        $ticket, $nextUser,
                         'Exécution / Déploiement',
                         'Exécuter la demande sur le terrain.',
-                        'execution_site'
+                        'execution_site',
+                        $siteData
                     );
                 }
             } elseif ($decision === 'besoin_fo') {
                 $nextUser = $this->findUserByDepartmentOrService('support_fo', 'FO');
                 if ($nextUser) {
                     $this->createTask(
-                        $ticket,
-                        $nextUser,
+                        $ticket, $nextUser,
                         'Étude capillaire FO',
                         'Étudier le besoin FO / deuxième paire FO.',
-                        'capillaire_fo'
+                        'capillaire_fo',
+                        $siteData
                     );
                 }
             } elseif ($decision === 'swap_routeur') {
                 $nextUser = $this->findUserByDepartmentOrService('ingenierie_ip', 'IP');
                 $this->createTask(
-                    $ticket,
-                    $nextUser ?? $task->getAssignedTo(),
+                    $ticket, $nextUser ?? $task->getAssignedTo(),
                     'Reprise ingénierie IP',
                     'Reprendre l\'étude après besoin de swap routeur.',
-                    'engineering_ip'
+                    'engineering_ip',
+                    $siteData
                 );
             }
             return;
@@ -356,11 +365,11 @@ class WorkflowEngineService
             $nextUser = $this->findUserByDepartmentOrService('support_fo', 'FO');
             if ($nextUser) {
                 $this->createTask(
-                    $ticket,
-                    $nextUser,
+                    $ticket, $nextUser,
                     'Déploiement FO',
                     'Planifier et réaliser le déploiement FO.',
-                    'deploiement_fo'
+                    'deploiement_fo',
+                    $siteData
                 );
             }
             return;
@@ -370,11 +379,11 @@ class WorkflowEngineService
             $nextUser = $this->findUserByDepartmentOrService('support_fo', 'FO');
             if ($nextUser) {
                 $this->createTask(
-                    $ticket,
-                    $nextUser,
+                    $ticket, $nextUser,
                     'Validation FO',
                     'Valider la partie FO avant retour vers exécution.',
-                    'validation_fo'
+                    'validation_fo',
+                    $siteData
                 );
             }
             return;
@@ -384,11 +393,11 @@ class WorkflowEngineService
             $nextUser = $this->findUserByDepartmentOrService('deploiement', 'DEPLOIEMENT');
             if ($nextUser) {
                 $this->createTask(
-                    $ticket,
-                    $nextUser,
+                    $ticket, $nextUser,
                     'Exécution / Déploiement',
                     'Exécuter la demande après validation FO.',
-                    'execution_site'
+                    'execution_site',
+                    $siteData
                 );
             }
             return;
@@ -398,11 +407,11 @@ class WorkflowEngineService
             $nextUser = $this->findUserByDepartmentOrService('deploiement', 'DEPLOIEMENT');
             if ($nextUser) {
                 $this->createTask(
-                    $ticket,
-                    $nextUser,
+                    $ticket, $nextUser,
                     'Validation finale',
                     'Valider définitivement le workflow.',
-                    'validation_finale'
+                    'validation_finale',
+                    $siteData
                 );
             }
             return;
@@ -417,11 +426,11 @@ class WorkflowEngineService
                 $nextUser = $this->findUserByDepartmentOrService('deploiement', 'DEPLOIEMENT');
                 if ($nextUser) {
                     $this->createTask(
-                        $ticket,
-                        $nextUser,
+                        $ticket, $nextUser,
                         'Correction après validation NOK',
                         'Corriger les remarques de validation finale.',
-                        'execution_site'
+                        'execution_site',
+                        $siteData
                     );
                 }
             }
@@ -433,7 +442,8 @@ class WorkflowEngineService
         User $assignedUser,
         string $title,
         string $description,
-        string $stepCode
+        string $stepCode,
+        ?array $siteData = null
     ): TicketTask {
         $task = new TicketTask();
         $task->setTicket($ticket);
@@ -446,6 +456,7 @@ class WorkflowEngineService
         $task->setStatus(TicketTask::STATUS_PENDING);
         $task->setCreatedAt(new \DateTime());
         $task->setUpdatedAt(new \DateTime());
+        $task->setSiteData($siteData);
 
         $ticket->setStatus('in_progress');
         $ticket->setUpdatedAt(new \DateTime());
@@ -459,6 +470,19 @@ class WorkflowEngineService
             'Nouvelle tâche créée: ' . $title . ' pour ' . ($assignedUser->getUsername() ?? $assignedUser->getEmail())
         );
 
+        // ✅ Correction : notifier (base + email) l'utilisateur assigné à CHAQUE création de tâche
+        $this->notificationService->notify(
+            $assignedUser,
+            NotificationService::TYPE_WORKFLOW_ASSIGNED,
+            sprintf(
+                'Nouvelle tâche : %s pour le ticket #%d - %s',
+                $title,
+                $ticket->getId() ?? 0,
+                $ticket->getTitle()
+            ),
+            $ticket
+        );
+
         $this->em->flush();
 
         return $task;
@@ -466,29 +490,7 @@ class WorkflowEngineService
 
     public function refreshTicketProgress(Ticket $ticket): void
     {
-        $tasks = $ticket->getTasks();
-        $total = count($tasks);
-
-        if ($total === 0) {
-            $ticket->setProgress(0);
-            return;
-        }
-
-        $done = 0;
-        foreach ($tasks as $task) {
-            if ($task->getStatus() === TicketTask::STATUS_DONE) {
-                $done++;
-            }
-        }
-
-        $progress = (int) round(($done / $total) * 100);
-        $ticket->setProgress($progress);
-
-        if ($progress >= 100 && $ticket->getStatus() !== 'closed') {
-            $ticket->setStatus('completed');
-        } elseif ($progress > 0 && $ticket->getStatus() !== 'closed' && $ticket->getStatus() !== 'completed') {
-            $ticket->setStatus('in_progress');
-        }
+        $this->ticketWorkflowService->refreshTicketProgress($ticket);
     }
 
     private function findUserByDepartmentOrService(?string $department, ?string $service): ?User
@@ -509,6 +511,9 @@ class WorkflowEngineService
         return $qb->getQuery()->getOneOrNullResult();
     }
 
+    /**
+     * Ajoute un historique avec date_jour correctement remplie.
+     */
     private function addHistory(
         Ticket $ticket,
         ?User $user,
@@ -520,6 +525,7 @@ class WorkflowEngineService
         $history->setUser($user);
         $history->setAction($action);
         $history->setDetails($details);
+        $history->setDateJour(new \DateTime()); // ✅ Correction : remplir date_jour
 
         $this->em->persist($history);
     }

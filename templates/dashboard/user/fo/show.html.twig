@@ -1,0 +1,223 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<style>
+    .fo-container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; }
+    .fo-card { background:#fff; border-radius:.75rem; border:1px solid #e9edf4; padding:1.25rem; margin-bottom:1.25rem; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+    .fo-section-title { font-size:.95rem; font-weight:600; color:#1e293b; margin-bottom:.8rem; }
+    .fo-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; }
+    @media (max-width:640px) { .fo-grid-2 { grid-template-columns:1fr; } }
+    .fo-back { color:#2e75b6; text-decoration:none; font-size:.9rem; display:inline-flex; align-items:center; gap:6px; margin-bottom:1rem; }
+    .fo-site-btn { padding:.4rem .8rem; border-radius:.4rem; border:1px solid #d1d5db; background:#fff; cursor:pointer; font-size:.85rem; display:inline-flex; align-items:center; gap:.4rem; text-decoration:none; color:#1e293b; }
+    .fo-site-btn:hover { background:#f1f5f9; text-decoration:none; color:#1e293b; }
+    .fo-site-btn.active { border-color:#2e75b6; background:#eff6ff; }
+    .fo-site-btn.completed { background:#d1fae5; border-color:#10b981; color:#065f46; cursor:default; opacity:.75; pointer-events:none; }
+    .fo-progress-bar { width:100%; height:.5rem; background:#e2e8f0; border-radius:9999px; overflow:hidden; margin:.5rem 0; }
+    .fo-progress-bar .fill { height:100%; background:#2e75b6; border-radius:9999px; }
+    .fo-form-group { margin-bottom:.9rem; }
+    .fo-form-label { display:block; font-size:.78rem; font-weight:500; color:#334155; margin-bottom:.2rem; }
+    .fo-form-control { width:100%; border:1px solid #d1d5db; border-radius:.4rem; padding:.4rem .6rem; font-size:.85rem; background:#fff; }
+    .fo-form-control:focus { outline:none; border-color:#2e75b6; box-shadow:0 0 0 3px rgba(46,117,182,.1); }
+    .fo-btn-success { padding:.5rem 1.2rem; border-radius:.4rem; border:none; font-weight:600; font-size:.85rem; cursor:pointer; background:#16a34a; color:#fff; }
+    .fo-btn-success:hover { background:#15803d; }
+    .fo-btn-success:disabled { background:#9ca3af; cursor:not-allowed; }
+    .fo-motif-hint { font-size:.78rem; color:#94a3b8; line-height:1.5; margin-top:6px; }
+    .fo-history-entry { margin-bottom:1rem; padding-left:.3rem; }
+    .fo-history-date { font-size:.65rem; color:#94a3b8; }
+    .fo-history-action { font-weight:600; color:#1e293b; font-size:.85rem; }
+    .badge-status { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 9999px; font-size: 0.65rem; font-weight: 600; text-transform: capitalize; }
+    .badge-open { background: #dbeafe; color: #1e40af; }
+    .badge-in_progress { background: #fef3c7; color: #92400e; }
+    .badge-completed { background: #d1fae5; color: #065f46; }
+    .badge-closed { background: #e5e7eb; color: #374151; }
+    .badge-blocked { background: #fee2e2; color: #991b1b; }
+    .badge-waiting_superuser { background: #f3e8ff; color: #6b21a5; }
+    .hidden-block { display: none; }
+</style>
+
+<div class="fo-container">
+    <a href="{{ path('dashboard_fo_index') }}" class="fo-back"><i class="fa-solid fa-arrow-left"></i> Retour à mes tâches</a>
+
+    <div class="mb-4">
+        <h1 style="font-size:1.3rem; font-weight:700; color:#1e293b;">{{ task.title }}</h1>
+        <p style="font-size:.85rem; color:#64748b;">Ticket · {{ ticket.title }} — Étape : {{ task.stepCode|replace({'_': ' '})|capitalize }}</p>
+    </div>
+
+    <div class="fo-card">
+        <div class="fo-grid-2">
+            <div>
+                <p><span style="font-size:.85rem; color:#6b7280;">Statut tâche :</span> <strong>{{ task.status|replace({'_': ' '})|capitalize }}</strong></p>
+                <p><span style="font-size:.85rem; color:#6b7280;">Statut ticket :</span> <span class="badge-status badge-{{ ticket.status|replace({'_': ''})|lower }}">{{ ticket.status|replace({'_': ' '})|title }}</span></p>
+            </div>
+            <div>
+                <p><span style="font-size:.85rem; color:#6b7280;">Assigné à :</span> {{ task.assignedTo.username|default('N/A') }}</p>
+                <p><span style="font-size:.85rem; color:#6b7280;">Progression ticket :</span> {{ ticket.progress }}%</p>
+            </div>
+        </div>
+        <div class="fo-progress-bar">
+            <div class="fill" style="width: {{ ticket.progress }}%;"></div>
+        </div>
+    </div>
+
+    <div class="fo-card">
+        <h2 class="fo-section-title">📋 Sites à traiter ({{ totalSites }})</h2>
+        <div style="display:flex; flex-wrap:wrap; gap:.5rem;">
+            {% for site in sites %}
+                {% set decision = siteDecisions[site.id] ?? null %}
+                {% set isDone = decision is not null %}
+                <a href="{{ isDone ? '#' : path('dashboard_fo_task_show', {id: task.id, site: site.id}) }}"
+                   class="fo-site-btn {% if selectedSite and site.id == selectedSite.id %}active{% endif %} {% if isDone %}completed{% endif %}"
+                   {% if isDone %}onclick="return false;"{% endif %}>
+                    {% if isDone %}✓{% endif %} {{ site.siteName }}
+                    {% if isDone %}<span style="font-size:.65rem;">({{ decision.decision }})</span>{% endif %}
+                </a>
+            {% else %}
+                <p style="color:#9ca3af; font-size:.85rem;">Aucun site rattaché à cette tâche.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% set selectedDecision = selectedSite ? (siteDecisions[selectedSite.id] ?? null) : null %}
+    {% if selectedSite and not selectedDecision and task.status != 'done' and task.status != 'completed' %}
+        <div class="fo-card">
+            <h2 class="fo-section-title">⚙️ Décision pour <strong>{{ selectedSite.siteName }}</strong></h2>
+            <form method="post" action="{{ path('dashboard_fo_site_decision', {id: task.id, siteId: selectedSite.id}) }}">
+                <div class="fo-form-group">
+                    <label class="fo-form-label">Décision</label>
+                    <select name="decision" id="decisionSelect" class="fo-form-control" onchange="toggleDecisionFields()">
+                        <option value="OK">OK — Faisable</option>
+                        <option value="NOK">NOK — Rejeté</option>
+                    </select>
+                </div>
+
+                {# --- Bloc : Motif du NOK (affiché uniquement si décision = NOK et step = analyse initiale) --- #}
+                {% if task.stepCode == constant('App\\Entity\\TicketTask::STEP_FO_INITIAL_ANALYSIS') %}
+                <div id="foMotifBlock" class="fo-form-group hidden-block">
+                    <label class="fo-form-label">Motif du NOK</label>
+                    <select name="motif" class="fo-form-control">
+                        <option value="">-- Choisir --</option>
+                        {% for value, label in motifs %}
+                            <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <p class="fo-motif-hint">
+                        "Besoin 2ème paire FO" transmet vers l'Ingénierie Capillaire.<br>
+                        "Besoin swap routeur" transmet vers l'Ingénierie IP.<br>
+                        "Autre action" nécessite une intervention manuelle.
+                    </p>
+                </div>
+                {% endif %}
+
+                {# --- Bloc : WO IP (affiché si décision = OK et département ingénierie IP) --- #}
+                {% if task.departmentName == 'ingenierie_ip' and (task.stepCode == constant('App\\Entity\\TicketTask::STEP_FO_WO_IP_CREATION') or task.stepCode == constant('App\\Entity\\TicketTask::STEP_FO_INITIAL_ANALYSIS')) %}
+                <div id="foWoBlock" class="hidden-block">
+                    <div class="fo-form-group">
+                        <label class="fo-form-label">Référence WO IP</label>
+                        <input type="text" name="wo_ip_reference" class="fo-form-control" placeholder="Ex: WO-IP-2026-001" value="{{ siteDecisions[selectedSite.id]['wo_ip_reference'] ?? '' }}">
+                    </div>
+                    <div class="fo-form-group">
+                        <label class="fo-form-label">Contenu du WO IP (coller le tableau Excel)</label>
+                        <textarea name="wo_ip_content" rows="8" class="fo-form-control" placeholder="Collez ici le contenu du tableau Excel (WO IP)&#10;Exemple :&#10;Site;Capacité;Date;Référence&#10;SiteA;100;2026-07-10;WO-001">{{ woIpContent|default('') }}</textarea>
+                        <p class="fo-motif-hint">Copiez-collez les données du tableau Excel au format texte (colonnes séparées par des tabulations ou points-virgules).</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                {# --- CHAMPS SPÉCIFIQUES : SUPPORT TRANS (Soft upgrade FH) --- #}
+                {% if task.stepCode == constant('App\\Entity\\TicketTask::STEP_FH_EXECUTION_WO') and task.departmentName == 'support_trans' %}
+                    <div class="fo-form-group">
+                        <label class="fo-form-label">Date Exécution WO</label>
+                        <input type="date" name="date_execution_wo" class="fo-form-control" value="{{ fhFields.date_execution_wo|default('') }}">
+                    </div>
+                    <div class="fo-form-group">
+                        <label class="fo-form-label">Commentaire WO</label>
+                        <textarea name="commentaire_execution_wo" rows="2" class="fo-form-control">{{ fhFields.commentaire_execution_wo|default('') }}</textarea>
+                    </div>
+                {% endif %}
+
+                {# --- CHAMPS SPÉCIFIQUES : INGÉNIERIE IP (LLD hard upgrade FH) --- #}
+                {% if task.stepCode == constant('App\\Entity\\TicketTask::STEP_FH_LLD') and task.departmentName == 'ingenierie_ip' %}
+                    <div class="fo-form-group">
+                        <label class="fo-form-label">Numéro port LLD</label>
+                        <input type="number" step="0.01" name="lld_port" class="fo-form-control" value="{{ fhFields.lld_port|default('') }}" placeholder="Ex: 1.0">
+                    </div>
+                    <div class="fo-form-group">
+                        <label class="fo-form-label">LLD OK</label>
+                        <div>
+                            <label><input type="radio" name="lld_ok" value="1" {{ (fhFields.lld_ok|default('')) == '1' ? 'checked' : '' }}> OK</label>
+                            <label><input type="radio" name="lld_ok" value="0" {{ (fhFields.lld_ok|default('')) == '0' ? 'checked' : '' }}> NOK</label>
+                        </div>
+                    </div>
+                    <div class="fo-form-group">
+                        <label class="fo-form-label">Commentaire LLD</label>
+                        <textarea name="commentaire_lld" rows="2" class="fo-form-control">{{ fhFields.commentaire_lld|default('') }}</textarea>
+                    </div>
+                {% endif %}
+
+                <div class="fo-form-group">
+                    <label class="fo-form-label">Commentaire</label>
+                    <textarea name="comment" rows="2" class="fo-form-control"></textarea>
+                </div>
+
+                <button type="submit" class="fo-btn-success">✅ Valider ce site</button>
+            </form>
+        </div>
+    {% elseif selectedSite and selectedDecision %}
+        <div class="fo-card">
+            <div style="background:#d1fae5; border:1px solid #10b981; border-radius:.5rem; padding:1rem; color:#065f46; text-align:center;">
+                ✅ Site déjà traité — décision : <strong>{{ selectedDecision.decision }}</strong>
+                {% if selectedDecision.motif %} ({{ motifs[selectedDecision.motif]|default(selectedDecision.motif) }}){% endif %}
+            </div>
+        </div>
+    {% elseif task.status == 'done' or task.status == 'completed' %}
+        <div class="fo-card">
+            <div style="background:#dbeafe; border:1px solid #3b82f6; border-radius:.5rem; padding:1rem; color:#1e40af; text-align:center;">
+                ✅ Cette tâche est déjà terminée.
+            </div>
+        </div>
+    {% else %}
+        <div class="fo-card">
+            <p style="font-size:.85rem; color:#6b7280;">Sélectionnez un site ci-dessus pour saisir une décision.</p>
+        </div>
+    {% endif %}
+
+    <div class="fo-card">
+        <h2 class="fo-section-title">📜 Historique du ticket</h2>
+        {% for entry in ticket.history %}
+            <div class="fo-history-entry">
+                <div class="fo-history-date">{{ entry.createdAt ? entry.createdAt|date('d/m/Y H:i') : '-' }}</div>
+                <div class="fo-history-action">{{ entry.action|replace({'_': ' '})|capitalize }}</div>
+                {% if entry.details %}<div style="font-size:.8rem; color:#475569;">{{ entry.details }}</div>{% endif %}
+            </div>
+        {% else %}
+            <p style="font-size:.85rem; color:#6b7280;">Aucun historique.</p>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+    function toggleDecisionFields() {
+        var decision = document.getElementById('decisionSelect');
+        var motifBlock = document.getElementById('foMotifBlock');
+        var woBlock = document.getElementById('foWoBlock');
+
+        if (!decision) return;
+
+        // Cacher les deux blocs initialement
+        if (motifBlock) motifBlock.style.display = 'none';
+        if (woBlock) woBlock.style.display = 'none';
+
+        // Afficher le bon bloc selon la décision
+        if (decision.value === 'NOK') {
+            if (motifBlock) motifBlock.style.display = 'block';
+        } else if (decision.value === 'OK') {
+            if (woBlock) woBlock.style.display = 'block';
+        }
+    }
+
+    // Initialiser l'affichage au chargement
+    document.addEventListener('DOMContentLoaded', function() {
+        toggleDecisionFields();
+    });
+</script>
+{% endblock %}

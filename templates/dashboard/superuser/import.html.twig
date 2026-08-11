@@ -3,18 +3,15 @@
 {% block dashboard_content %}
 <div class="import-page">
     <div class="page-header">
-        <h2 class="page-title">Import des fichiers</h2>
-        <div class="page-desc">Import global des fichiers Traffic / Ports / Liaison</div>
     </div>
 
-    <!-- Section Import global -->
     <div class="card mb-10">
         <div class="card-header">
             <h3 class="card-title">📊 Import global des sites</h3>
             <p class="card-desc">Fichiers contenant les données de trafic, ports et types de liaison (tous services confondus).</p>
         </div>
         <div class="card-body">
-            <form method="post" action="{{ path('superuser_dashboard_import') }}" enctype="multipart/form-data" class="import-form">
+            <form method="post" action="{{ path('superuser_data_import_process') }}" enctype="multipart/form-data" class="import-form">
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Fichier Traffic <span class="required">*</span></label>
@@ -39,7 +36,6 @@
         </div>
     </div>
 
-    <!-- Section Import des capacités -->
     <div class="card">
         <div class="card-header">
             <h3 class="card-title">⚙️ Importer les capacités des sites</h3>
@@ -62,13 +58,38 @@
                     </form>
                 </div>
                 <div class="capacity-card">
-                    <h4>🌐 Capacités Backbone</h4>
+                    <h4>🌐 Capacités Backhaul</h4>
                     <form method="post" action="{{ path('superuser_import_capacite', {type: 'backbone'}) }}" enctype="multipart/form-data">
                         <input type="file" name="capacite_file" accept=".xlsx,.xls,.csv" required>
                         <button type="submit" class="btn-secondary">Importer Backbone</button>
                     </form>
                 </div>
             </div>
+        </div>
+    </div>
+
+    {# ========== BLOC DROPCONG (UN SEUL FICHIER) ========== #}
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">📉 Importer les KPIs DropCong</h3>
+            <p class="card-desc">
+                Fichier contenant les indicateurs de Drop Congestion (IUB / RscGroup).
+                Une seule feuille ou un seul fichier est attendu.
+            </p>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{{ path('superuser_import_dropcong') }}" enctype="multipart/form-data">
+                <div class="form-grid" style="grid-template-columns: 1fr;">
+                    <div class="form-group">
+                        <label>Fichier DropCong <span class="required">*</span></label>
+                        <input type="file" name="fichier" accept=".xlsx,.xls,.csv" required>
+                        <small>Fichier Excel ou CSV contenant les colonnes nécessaires (ex: NODEBNAME, VS.IUB.FlowCtrol.DL.DropCong.DownBWNum.LgcPort1, etc.)</small>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-secondary">📤 Importer DropCong</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -78,20 +99,17 @@
 .page-header { margin-bottom: 30px; }
 .page-title { font-size: 28px; font-weight: 700; color: #07152f; margin: 0; }
 .page-desc { color: #60708a; margin-top: 6px; }
-
 .card { background: white; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 30px; overflow: hidden; }
 .card-header { padding: 24px 28px 0 28px; }
 .card-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; color: #0f172a; }
 .card-desc { color: #64748b; font-size: 14px; }
 .card-body { padding: 24px 28px 28px 28px; }
-
 .form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 30px; }
 .form-group label { display: block; font-weight: 600; margin-bottom: 8px; color: #1e293b; }
 .form-group .required { color: #ef4444; }
 .form-group input[type="file"] { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 12px; background: #f8fafc; font-size: 14px; }
 .form-group small { display: block; color: #64748b; font-size: 12px; margin-top: 6px; }
 .form-actions { text-align: center; margin-top: 10px; }
-
 .capacities-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
 .capacity-card { background: #f8fafc; border-radius: 16px; padding: 20px; text-align: center; transition: all 0.2s; }
 .capacity-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
@@ -102,7 +120,6 @@
 .btn-secondary { background: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1; padding: 10px 20px; border-radius: 40px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
 .btn-secondary:hover { background: #e2e8f0; }
 .btn-lg { padding: 12px 32px; font-size: 16px; }
-
 @media (max-width: 900px) {
     .form-grid, .capacities-grid { grid-template-columns: 1fr; }
 }

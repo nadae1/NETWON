@@ -1,0 +1,531 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+
+<style>
+.kpis-page { padding: 20px; }
+.kpis-header { margin-bottom: 24px; }
+.kpis-title { font-size: 28px; font-weight: 700; color: #07152f; margin: 0; }
+
+.kpis-filters {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(150px, 1fr));
+    gap: 12px;
+    align-items: end;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 20px;
+}
+
+.kpis-filter-group { display: flex; flex-direction: column; gap: 6px; }
+.kpis-filter-group label { font-size: 12px; font-weight: 600; color: #64748b; }
+.kpis-filter-group select,
+.kpis-filter-group input[type="text"],
+.kpis-filter-group input[type="date"] {
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    width: 100%;
+    box-sizing: border-box;
+}
+.kpis-btn { padding: 9px 16px; border-radius: 8px; border: none; background: #3b82f6; color: #fff; font-weight: 600; cursor: pointer; }
+
+#siteSearch { margin-bottom: 4px; }
+
+.kpis-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+.kpis-stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; }
+.kpis-stat-label { font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 600; }
+.kpis-stat-value { font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 6px; }
+
+.kpis-chart-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+.kpis-chart-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.kpis-chart-title { margin: 0; font-size: 16px; color: #0f172a; }
+.kpis-export-btn { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px; cursor: pointer; font-weight: 600; color: #334155; }
+.kpis-canvas-wrap { height: 360px; position: relative; }
+.kpis-empty { text-align: center; color: #64748b; padding: 20px; }
+
+.kpis-no-traffic-banner {
+    display: none;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+@media (max-width: 1100px) {
+    .kpis-filters { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+    .kpis-stats { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+
+<div class="kpis-page">
+    <div class="kpis-header">
+        <h2 class="kpis-title">{{ kpiTitle|default('KPIs') }}</h2>
+    </div>
+
+    <div class="kpis-filters">
+        <div class="kpis-filter-group">
+            <label for="siteSearch">Site</label>
+            <input type="text" id="siteSearch" placeholder="Rechercher un site..." autocomplete="off">
+            <select id="siteSelect" size="1">
+                <option value="">-- Choisir un site --</option>
+                {% for site in sites %}
+                    <option value="{{ site.prefix }}">{{ site.prefix }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="kpis-filter-group">
+            <label for="startDate">Du</label>
+            <input type="date" id="startDate">
+        </div>
+
+        <div class="kpis-filter-group">
+            <label for="endDate">Au</label>
+            <input type="date" id="endDate">
+        </div>
+
+        <div class="kpis-filter-group">
+            <label for="trafficFilter">Filtre trafic</label>
+            <select id="trafficFilter">
+                <option value="total">Trafic total</option>
+                <option value="tdd">Trafic TDD</option>
+                <option value="fdd">Trafic FDD</option>
+                <option value="all" selected>Tous les trafics</option>
+            </select>
+        </div>
+
+        <div class="kpis-filter-group">
+            <label for="capacityFilter">Filtre capacité</label>
+            <select id="capacityFilter">
+                <option value="tdd">Capacité TDD</option>
+                <option value="fdd">Capacité FDD</option>
+                <option value="all" selected>Toutes les capacités</option>
+            </select>
+        </div>
+
+        <button id="loadBtn" class="kpis-btn">Afficher</button>
+    </div>
+
+    <div class="kpis-no-traffic-banner" id="noTrafficBanner">
+        ⚠️ Aucune donnée de trafic trouvée en base pour ce site sur la période sélectionnée.
+        Vérifiez le nom exact du site dans <code>trafic_historique</code> ou élargissez la période.
+    </div>
+
+    <div class="kpis-stats" id="statsGrid" style="display:none;">
+        <div class="kpis-stat-card">
+            <div class="kpis-stat-label">Trafic moyen total</div>
+            <div class="kpis-stat-value" id="avgTrafficValue">-</div>
+        </div>
+        <div class="kpis-stat-card">
+            <div class="kpis-stat-label">Trafic max total</div>
+            <div class="kpis-stat-value" id="maxTrafficValue">-</div>
+        </div>
+        <div class="kpis-stat-card">
+            <div class="kpis-stat-label">Capacité TDD / FDD</div>
+            <div class="kpis-stat-value" id="splitCapacityValue">-</div>
+        </div>
+        <div class="kpis-stat-card">
+            <div class="kpis-stat-label">Capacité totale</div>
+            <div class="kpis-stat-value" id="totalCapacityValue">-</div>
+        </div>
+    </div>
+
+    <div class="kpis-chart-card">
+        <div class="kpis-chart-head">
+            <h3 class="kpis-chart-title">Trafic en fonction de la capacité</h3>
+            <button class="kpis-export-btn" id="exportTrafficChart">Exporter graphe</button>
+        </div>
+        <div class="kpis-canvas-wrap">
+            <canvas id="trafficVsCapacityChart"></canvas>
+        </div>
+    </div>
+
+    <div class="kpis-chart-card">
+        <div class="kpis-chart-head">
+            <h3 class="kpis-chart-title">Courbe de capacité seule</h3>
+            <button class="kpis-export-btn" id="exportCapacityChart">Exporter graphe</button>
+        </div>
+        <div class="kpis-canvas-wrap">
+            <canvas id="capacityOnlyChart"></canvas>
+        </div>
+    </div>
+
+    <div id="emptyState" class="kpis-empty">Sélectionnez un site puis cliquez sur "Afficher".</div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const userId = '{{ userId|default('anonymous') }}';
+    const STORAGE_KEY_SITE = 'kpis_selected_site_' + userId;
+    const STORAGE_KEY_START = 'kpis_selected_start_' + userId;
+    const STORAGE_KEY_END = 'kpis_selected_end_' + userId;
+
+    const siteSelect = document.getElementById('siteSelect');
+    const siteSearch = document.getElementById('siteSearch');
+    const startDate = document.getElementById('startDate');
+    const endDate = document.getElementById('endDate');
+    const trafficFilter = document.getElementById('trafficFilter');
+    const capacityFilter = document.getElementById('capacityFilter');
+    const statsGrid = document.getElementById('statsGrid');
+    const emptyState = document.getElementById('emptyState');
+    const loadBtn = document.getElementById('loadBtn');
+    const noTrafficBanner = document.getElementById('noTrafficBanner');
+
+    let trafficChart = null;
+    let capacityChart = null;
+    let latestData = null;
+
+    function saveSelectedSite(value) {
+        if (value) {
+            localStorage.setItem(STORAGE_KEY_SITE, value);
+        } else {
+            localStorage.removeItem(STORAGE_KEY_SITE);
+        }
+    }
+
+    function loadSelectedSite() {
+        return localStorage.getItem(STORAGE_KEY_SITE) || '';
+    }
+
+    function saveSelectedDates(start, end) {
+        if (start) localStorage.setItem(STORAGE_KEY_START, start);
+        else localStorage.removeItem(STORAGE_KEY_START);
+        if (end) localStorage.setItem(STORAGE_KEY_END, end);
+        else localStorage.removeItem(STORAGE_KEY_END);
+    }
+
+    function loadSelectedDates() {
+        return {
+            start: localStorage.getItem(STORAGE_KEY_START) || '',
+            end: localStorage.getItem(STORAGE_KEY_END) || ''
+        };
+    }
+
+    function toDateInputValue(isoLike) {
+        // Convertit "2026-04-13 06:00:00" ou une date ISO en "YYYY-MM-DD"
+        const d = new Date(isoLike);
+        if (isNaN(d.getTime())) return '';
+        return d.toISOString().split('T')[0];
+    }
+
+    function filterSites(searchTerm) {
+        const term = searchTerm.toLowerCase().trim();
+        const options = siteSelect.querySelectorAll('option');
+        options.forEach(opt => {
+            const text = opt.textContent.toLowerCase();
+            const match = term === '' || text.includes(term);
+            opt.style.display = match ? '' : 'none';
+        });
+    }
+
+    siteSearch.addEventListener('input', function () {
+        filterSites(this.value);
+    });
+
+    siteSelect.addEventListener('change', function () {
+        const val = this.value;
+        saveSelectedSite(val);
+        const selectedOption = this.options[this.selectedIndex];
+        if (selectedOption && selectedOption.value !== '') {
+            siteSearch.value = selectedOption.textContent;
+        } else {
+            siteSearch.value = '';
+        }
+        filterSites(siteSearch.value);
+
+        // ✅ CORRIGÉ : dès qu'un site est choisi, si aucune date n'a été
+        // explicitement choisie par l'utilisateur auparavant, on lance un
+        // chargement "auto-range" (sans dates) pour laisser le backend
+        // ancrer la période sur les vraies données du site, plutôt que de
+        // forcer silencieusement une plage calculée sur l'horloge du
+        // navigateur.
+        if (val) {
+            const saved = loadSelectedDates();
+            if (!saved.start || !saved.end) {
+                loadData(true);
+            }
+        }
+    });
+
+    startDate.addEventListener('change', function() {
+        saveSelectedDates(this.value, endDate.value);
+    });
+    endDate.addEventListener('change', function() {
+        saveSelectedDates(startDate.value, this.value);
+    });
+
+    function formatValue(value) {
+        if (value === null || value === undefined) {
+            return '-';
+        }
+        return `${Number(value).toFixed(2)} Mbps`;
+    }
+
+    function pickKeys(filterValue) {
+        if (filterValue === 'all') {
+            return ['total', 'tdd', 'fdd'];
+        }
+        return [filterValue];
+    }
+
+    function buildTrafficDatasets(data) {
+        const colors = { total: '#2563eb', tdd: '#0ea5e9', fdd: '#8b5cf6' };
+        const labels = { total: 'Trafic total', tdd: 'Trafic TDD', fdd: 'Trafic FDD' };
+        const keys = pickKeys(trafficFilter.value);
+
+        return keys
+            .filter((key) => data.series.traffic[key] && data.series.traffic[key].length > 0)
+            .map((key) => ({
+                label: labels[key],
+                data: data.series.traffic[key],
+                borderColor: colors[key],
+                backgroundColor: 'transparent',
+                fill: false,
+                tension: 0.25,
+                pointRadius: 1.5,
+                borderWidth: 2
+            }));
+    }
+
+    function buildCapacityDatasets(data) {
+        const colors = { tdd: '#f59e0b', fdd: '#10b981' };
+        const labels = { tdd: 'Capacité TDD', fdd: 'Capacité FDD' };
+        let keys = pickKeys(capacityFilter.value);
+        keys = keys.filter(key => key !== 'total');
+
+        return keys
+            .filter((key) => data.series.capacity[key] && data.series.capacity[key].length > 0)
+            .map((key) => ({
+                label: labels[key],
+                data: data.series.capacity[key],
+                borderColor: colors[key],
+                backgroundColor: 'transparent',
+                borderDash: [6, 4],
+                fill: false,
+                pointRadius: 0,
+                borderWidth: 2
+            }));
+    }
+
+    function chartOptions() {
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            parsing: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: { unit: 'day' },
+                    title: { display: true, text: 'Date / heure' }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Mbps' }
+                }
+            },
+            plugins: {
+                legend: { position: 'top' }
+            }
+        };
+    }
+
+    function renderCharts() {
+        if (!latestData) {
+            return;
+        }
+
+        const trafficDatasets = buildTrafficDatasets(latestData);
+        const capacityDatasets = buildCapacityDatasets(latestData);
+
+        if (trafficChart) {
+            trafficChart.destroy();
+            trafficChart = null;
+        }
+        if (capacityChart) {
+            capacityChart.destroy();
+            capacityChart = null;
+        }
+
+        if (!latestData.hasTrafficData) {
+            noTrafficBanner.style.display = 'block';
+            return;
+        }
+        noTrafficBanner.style.display = 'none';
+
+        const trafficCtx = document.getElementById('trafficVsCapacityChart').getContext('2d');
+        trafficChart = new Chart(trafficCtx, {
+            type: 'line',
+            data: {
+                datasets: [...trafficDatasets, ...capacityDatasets]
+            },
+            options: chartOptions()
+        });
+
+        const capacityCtx = document.getElementById('capacityOnlyChart').getContext('2d');
+        capacityChart = new Chart(capacityCtx, {
+            type: 'line',
+            data: {
+                datasets: capacityDatasets
+            },
+            options: chartOptions()
+        });
+    }
+
+    function updateStats(data) {
+        document.getElementById('avgTrafficValue').textContent = formatValue(data.stats.avgTrafficTotal);
+        document.getElementById('maxTrafficValue').textContent = formatValue(data.stats.maxTrafficTotal);
+        document.getElementById('splitCapacityValue').textContent = `${formatValue(data.capacities.tdd)} / ${formatValue(data.capacities.fdd)}`;
+        document.getElementById('totalCapacityValue').textContent = formatValue(data.capacities.total);
+
+        if (data.dataRange && data.dataRange.start && data.dataRange.end) {
+            const start = new Date(data.dataRange.start).toLocaleDateString('fr-FR');
+            const end = new Date(data.dataRange.end).toLocaleDateString('fr-FR');
+            document.querySelector('.kpis-chart-title').textContent =
+                `Trafic en fonction de la capacité (${start} → ${end})`;
+        }
+
+        statsGrid.style.display = 'grid';
+        emptyState.style.display = 'none';
+    }
+
+    function exportCanvas(canvasId, filename) {
+        const canvas = document.getElementById(canvasId);
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }
+
+    /**
+     * ✅ CORRIGÉ : loadData(autoRange) — si autoRange est vrai (ou si les
+     * champs de dates sont vides), on n'envoie PAS de start/end au
+     * backend. Le backend (getKpiCurvesDataForPrefix) ancre alors
+     * lui-même la période sur la dernière donnée réelle du site. Avant,
+     * le JS forçait TOUJOURS des dates calculées sur l'horloge du
+     * navigateur ("aujourd'hui - 30j → aujourd'hui"), ce qui pouvait
+     * complètement manquer des données historiques importées avec des
+     * dates différentes de la date système.
+     */
+    function loadData(autoRange) {
+        const prefix = siteSelect.value;
+        if (!prefix) {
+            statsGrid.style.display = 'none';
+            noTrafficBanner.style.display = 'none';
+            emptyState.style.display = 'block';
+            emptyState.textContent = 'Veuillez sélectionner un site dans la liste.';
+            return;
+        }
+
+        const useAutoRange = autoRange === true || (!startDate.value && !endDate.value);
+
+        let url = '{{ path(kpiDataRoute) }}?site=' + encodeURIComponent(prefix);
+        if (!useAutoRange) {
+            if (!startDate.value || !endDate.value) {
+                statsGrid.style.display = 'none';
+                noTrafficBanner.style.display = 'none';
+                emptyState.style.display = 'block';
+                emptyState.textContent = 'Veuillez sélectionner une période valide, ou laisser les deux champs vides pour un affichage automatique.';
+                return;
+            }
+            url += '&start=' + encodeURIComponent(startDate.value) + '&end=' + encodeURIComponent(endDate.value);
+        }
+
+        fetch(url)
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error('Erreur serveur');
+                }
+                return response.json();
+            })
+            .then((data) => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                latestData = data;
+
+                // Si on était en auto-range, on remplit maintenant les
+                // champs de dates avec la vraie plage retournée par le
+                // backend, pour que l'utilisateur voie et puisse ajuster.
+                if (useAutoRange && data.dataRange && data.dataRange.start && data.dataRange.end) {
+                    const s = toDateInputValue(data.dataRange.start);
+                    const e = toDateInputValue(data.dataRange.end);
+                    if (s) startDate.value = s;
+                    if (e) endDate.value = e;
+                    saveSelectedDates(startDate.value, endDate.value);
+                } else if (!useAutoRange) {
+                    saveSelectedDates(startDate.value, endDate.value);
+                }
+
+                updateStats(data);
+                renderCharts();
+                emptyState.style.display = 'none';
+                saveSelectedSite(prefix);
+            })
+            .catch((error) => {
+                statsGrid.style.display = 'none';
+                noTrafficBanner.style.display = 'none';
+                emptyState.style.display = 'block';
+                emptyState.textContent = 'Erreur : ' + error.message;
+            });
+    }
+
+    loadBtn.addEventListener('click', function () { loadData(false); });
+    trafficFilter.addEventListener('change', renderCharts);
+    capacityFilter.addEventListener('change', renderCharts);
+
+    document.getElementById('exportTrafficChart').addEventListener('click', function () {
+        exportCanvas('trafficVsCapacityChart', 'graphe-trafic-capacite.png');
+    });
+    document.getElementById('exportCapacityChart').addEventListener('click', function () {
+        exportCanvas('capacityOnlyChart', 'graphe-capacite.png');
+    });
+
+    // --- Initialisation ---
+    const savedSite = loadSelectedSite();
+    const savedDates = loadSelectedDates();
+
+    if (savedSite) {
+        const optionExists = siteSelect.querySelector(`option[value="${savedSite}"]`);
+        if (optionExists) {
+            siteSelect.value = savedSite;
+            const selectedOption = siteSelect.options[siteSelect.selectedIndex];
+            if (selectedOption) {
+                siteSearch.value = selectedOption.textContent;
+            }
+            filterSites(siteSearch.value);
+        } else {
+            localStorage.removeItem(STORAGE_KEY_SITE);
+        }
+    }
+
+    // ✅ CORRIGÉ : on ne pré-remplit plus systématiquement les dates avec
+    // "aujourd'hui - 30j → aujourd'hui". Si l'utilisateur avait
+    // explicitement choisi une période avant, on la restaure ; sinon les
+    // champs restent vides et loadData() basculera en auto-range.
+    if (savedDates.start && savedDates.end) {
+        startDate.value = savedDates.start;
+        endDate.value = savedDates.end;
+    }
+
+    if (savedSite && siteSelect.value) {
+        loadData(!(savedDates.start && savedDates.end));
+    } else {
+        emptyState.style.display = 'block';
+        emptyState.textContent = 'Sélectionnez un site puis cliquez sur "Afficher" (ou laissez les dates vides pour un affichage automatique).';
+    }
+
+    filterSites('');
+});
+</script>
+{% endblock %}

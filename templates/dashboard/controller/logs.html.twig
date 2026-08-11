@@ -1,0 +1,41 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="dashboard-home dashboard-home--controller">
+    <div class="dashboard-home-toolbar">
+        <div>
+            <h1 class="page-title">Logs utilisateurs</h1>
+            <div class="page-subtitle">Dernier login et dernier logout des comptes ROLE_USER</div>
+        </div>
+    </div>
+
+    <div class="card">
+        {% if users is empty %}
+            <div class="empty-state">Aucun utilisateur à afficher.</div>
+        {% else %}
+            <div class="table-like">
+                <div class="table-row table-row-head">
+                    <div>Username</div>
+                    <div>Email</div>
+                    <div>Service</div>
+                    <div>Département</div>
+                    <div>Dernier login</div>
+                    <div>Dernier logout</div>
+                </div>
+
+                {% for user in users %}
+                    {% set log = logsByUserId[user.id] ?? null %}
+                    <div class="table-row">
+                        <div><strong>{{ user.username }}</strong></div>
+                        <div>{{ user.email ?: '-' }}</div>
+                        <div>{{ user.service ?: '-' }}</div>
+                        <div>{{ user.department ?: '-' }}</div>
+                        <div>{{ log and log.lastLoginAt ? log.lastLoginAt|date('d/m/Y H:i') : '-' }}</div>
+                        <div>{{ log and log.lastLogoutAt ? log.lastLogoutAt|date('d/m/Y H:i') : '-' }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

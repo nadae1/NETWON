@@ -1,9 +1,7 @@
-# api_python/traitement.py — VERSION COMPLÈTE FINALE
-# Support : Excel (openpyxl/xlrd) et CSV (séparateur ; ou ,)
+# api_python/traitement.py — VERSION FINALE UNIFIÉE (corrigée)
 import pandas as pd
 import io
 import re
-import json
 from datetime import datetime, timedelta
 import psycopg2
 from psycopg2.extras import execute_values
@@ -11,20 +9,24 @@ import os
 import numpy as np
 import traceback
 
-# ========== CONFIG BDD ==========
 DB_CONFIG = {
-    "host":     os.getenv("DB_HOST", "127.0.0.1"),
-    "port":     int(os.getenv("DB_PORT", "5432")),
-    "dbname":   os.getenv("DB_NAME", "PFE_5G"),
-    "user":     os.getenv("DB_USER", "postgres"),
+    "host": os.getenv("DB_HOST", "127.0.0.1"),
+    "port": int(os.getenv("DB_PORT", "5432")),
+    "dbname": os.getenv("DB_NAME", "PFE_5G"),
+    "user": os.getenv("DB_USER", "postgres"),
     "password": os.getenv("DB_PASSWORD", "root"),
 }
 
-SEUIL_CONGESTION = 0.85
-SEUIL_PLATEAU = 0.05
+# ========== SEUILS ==========
+SEUIL_CONGESTION = 0.90
+SEUIL_OCCURRENCES_BRIDAGE = 50
+SEUIL_OCCURRENCES_VERIFICATION_CAPACITE = 20
+SEUIL_OCCURRENCES_RISQUE_CONGESTION = 57
 SEUIL_STABILITE_MONTANT = 0.05
+CAPACITE_10G_MBPS = 10000.0
 
 # ========== DÉTECTION TYPES ==========
+
 def est_site_tf(site: str) -> bool:
     return bool(re.search(r'_tf$', str(site), re.IGNORECASE))
 
@@ -41,13 +43,21 @@ def normaliser_type_trans(valeur: str) -> str:
     return str(valeur).strip()
 
 def extraire_prefixe(site: str) -> str:
+    """
+    ✅ CORRIGÉ : normalisation systématique en MAJUSCULES dès l'entrée.
+    Cette fonction est le point de passage unique pour dériver un préfixe
+    à partir d'un nom de site brut ; en garantissant qu'elle renvoie
+    toujours de la casse identique (majuscules) quelle que soit la casse
+    d'entrée, on aligne cette clé sur celle produite par capacite.py et
+    dropcong.py (qui normalisent déjà systématiquement en majuscules).
+    """
     if not site or (isinstance(site, float) and pd.isna(site)):
         return ''
-    s = str(site).strip()
+    s = str(site).strip().upper()
     for suf in ['_LMB', '_LM2', '_LM', '_TDD', '_TC', '_TD', '_TF', '_FDD', '_TT']:
-        if s.upper().endswith(suf.upper()):
+        if s.endswith(suf):
             return s[:len(s)-len(suf)].strip()
-    m = re.search(r'_(BH|BO|TR|OO|OR|TT)(_[A-Z0-9]+)*$', s, re.IGNORECASE)
+    m = re.search(r'_(BH|BO|TR|OO|OR|TT)(_[A-Z0-9]+)*$', s)
     if m:
         return s[:m.start()].strip()
     return s
@@ -63,6 +73,35 @@ def to_py(val):
     if isinstance(val, (np.integer, np.floating)):
         return val.item()
     return val
+
+def to_float(val) -> float:
+    try:
+        if val is None or pd.isna(val):
+            return 0.0
+    except Exception:
+        if val is None:
+            return 0.0
+    try:
+        return float(str(val).replace(',', '.').strip())
+    except Exception:
+        return 0.0
+
+def max_dropcong(df: pd.DataFrame) -> int:
+    if df is None or df.empty or 'DropCongDownBWNum' not in df.columns:
+        return 0
+    try:
+        return int(float(df['DropCongDownBWNum'].max() or 0))
+    except Exception:
+        return 0
+
+def calculer_nombre_occurrences(df: pd.DataFrame) -> int:
+    if df is None or df.empty or 'MaxSpeed' not in df.columns:
+        return 0
+    max_val = float(df['MaxSpeed'].max())
+    if max_val <= 0:
+        return 0
+    seuil = max_val * 0.9
+    return int((df['MaxSpeed'] >= seuil).sum())
 
 def get_type_trans_for_prefix(prefix, type_dict, capacite_dict=None):
     if prefix in type_dict:
@@ -81,68 +120,256 @@ def get_type_trans_for_prefix(prefix, type_dict, capacite_dict=None):
                 return capacite_dict[key]
     return 'NON_DEFINI'
 
-# ========== FONCTIONS POUR LES CAPACITÉS ==========
-def get_capacite_from_port_data(nom_site: str, port_info: dict) -> float:
-    if not nom_site or nom_site not in port_info:
-        return 0.0
-    ports = port_info[nom_site]
-    if '_TF' in str(nom_site).upper():
-        capacite = ports.get('port0', 0) + ports.get('port1', 0)
-    else:
-        capacite = max(ports.get('port0', 0), ports.get('port1', 0))
-    return float(capacite)
+# ========== CAPACITÉS ==========
 
-def charger_capacites_from_port_data(port_info: dict) -> dict:
+def resolve_capacites_tdd_fdd(classification, site_tf, site_tdd, site_fdd, site_simple, prefix, capacites_from_ports):
+    """
+    Retourne (cap_tdd, cap_fdd) séparément. Un site peut n'avoir de capacité
+    déclarée que sur le port qui porte réellement du trafic (l'autre reste
+    à 0), ou sur les deux ports simultanément. Ces deux valeurs restent
+    distinctes ici — c'est effective_capacity_for_utilization() qui décide
+    ensuite comment les combiner en une capacité "globale" pour l'affichage.
+    """
+    cap_tdd = 0.0
+    cap_fdd = 0.0
+    classification = (classification or '').upper().strip()
+
+    if classification == 'TF':
+        cap_fdd = _latest_capacity_for_sites(capacites_from_ports, [
+            site_tf, f"{prefix}_TF" if prefix else None, prefix, site_simple, site_fdd,
+        ])
+        return 0.0, cap_fdd
+
+    if site_tdd and site_tdd in capacites_from_ports:
+        cap_tdd = _capacity_value(capacites_from_ports, site_tdd)
+    if site_fdd and site_fdd in capacites_from_ports:
+        cap_fdd = _capacity_value(capacites_from_ports, site_fdd)
+    if site_simple and site_simple in capacites_from_ports:
+        cap_fdd = max(cap_fdd, _capacity_value(capacites_from_ports, site_simple))
+    if site_tf and site_tf in capacites_from_ports:
+        cap_fdd = max(cap_fdd, _capacity_value(capacites_from_ports, site_tf))
+
+    if cap_tdd <= 0 and cap_fdd <= 0 and prefix in capacites_from_ports:
+        fallback = _capacity_value(capacites_from_ports, prefix)
+        if classification in ('TF', 'ONLY_FDD', 'FDD', '-'):
+            cap_fdd = fallback
+        else:
+            cap_tdd = fallback
+
+    return cap_tdd, cap_fdd
+
+
+def effective_capacity_for_utilization(classification, cap_tdd, cap_fdd, fallback=0.0):
+    """
+    Capacité "globale" utilisée pour l'affichage (Capacite_Mbps) et pour
+    le taux d'utilisation global d'un site.
+
+    Quand un site a une capacité déclarée sur les deux ports (TDD et FDD)
+    — ce qui arrive pour COTRANS/NO_COTRANS — la capacité globale est le
+    MAX des deux, pas la somme. Les deux ports ne s'additionnent pas en
+    bande passante cumulée du point de vue de la capacité déclarée ; seul
+    le trafic combiné réel (mesuré) peut légitimement dépasser la capacité
+    d'un seul port, ce qui est normal et voulu (le taux peut alors dépasser
+    100% pour signaler une vraie saturation).
+    """
+    classification = (classification or '').upper().strip()
+    cap_tdd = float(cap_tdd or 0)
+    cap_fdd = float(cap_fdd or 0)
+    fallback = float(fallback or 0)
+
+    if classification in ('TF', 'ONLY_FDD', 'FDD', '-'):
+        return cap_fdd if cap_fdd > 0 else fallback
+
+    total = max(cap_tdd, cap_fdd)
+    return total if total > 0 else fallback
+
+
+def calculer_taux_utilisation_complet(max_trafic, max_tdd, max_fdd, capacite_tdd, capacite_fdd,
+                                       classification, capacite_globale=0):
+    """
+    Le taux d'utilisation global (hors TF/ONLY_FDD/FDD/-, donc pour
+    COTRANS/NO_COTRANS où les deux ports peuvent coexister) divise le
+    trafic max par MAX(capacite_tdd, capacite_fdd), pas par leur somme —
+    cohérent avec effective_capacity_for_utilization().
+    """
+    classification = (classification or '').upper().strip()
+    capacite_tdd = float(capacite_tdd or 0)
+    capacite_fdd = float(capacite_fdd or 0)
+
+    taux_tdd = round((max_tdd / capacite_tdd) * 100, 2) if capacite_tdd > 0 and max_tdd > 0 else None
+    taux_fdd = round((max_fdd / capacite_fdd) * 100, 2) if capacite_fdd > 0 and max_fdd > 0 else None
+
+    if classification in ('COTRANS', 'NO_COTRANS'):
+        return {'taux_utilisation': None, 'taux_utilisation_tdd': taux_tdd, 'taux_utilisation_fdd': taux_fdd}
+
+    taux_global = None
+    if classification in ('TF', 'ONLY_FDD', 'FDD', '-'):
+        if capacite_fdd > 0 and max_trafic > 0:
+            taux_global = round((max_trafic / capacite_fdd) * 100, 2)
+        elif capacite_globale > 0 and max_trafic > 0:
+            taux_global = round((max_trafic / capacite_globale) * 100, 2)
+    else:
+        capacite_max = max(capacite_tdd, capacite_fdd)
+        if capacite_max > 0 and max_trafic > 0:
+            taux_global = round((max_trafic / capacite_max) * 100, 2)
+        elif capacite_globale > 0 and max_trafic > 0:
+            taux_global = round((max_trafic / capacite_globale) * 100, 2)
+
+    return {'taux_utilisation': taux_global, 'taux_utilisation_tdd': taux_tdd, 'taux_utilisation_fdd': taux_fdd}
+
+
+def _parse_import_date(value):
+    if not value:
+        return datetime.min
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace(' ', 'T'))
+    except Exception:
+        return datetime.min
+
+def _capacity_value(capacites, site):
+    entry = capacites.get(site)
+    if isinstance(entry, dict):
+        return float(entry.get('value') or 0)
+    return float(entry or 0)
+
+def _capacity_date(capacites, site):
+    entry = capacites.get(site)
+    if isinstance(entry, dict):
+        return entry.get('date')
+    return None
+
+def _latest_capacity_for_sites(capacites, sites):
+    selected_value = 0.0
+    selected_date = datetime.min
+    for site in sites:
+        if not site or site not in capacites:
+            continue
+        candidate_value = _capacity_value(capacites, site)
+        candidate_date = _parse_import_date(_capacity_date(capacites, site))
+        if candidate_value > 0 and candidate_date >= selected_date:
+            selected_value = candidate_value
+            selected_date = candidate_date
+    return selected_value
+
+def _set_latest_capacity(capacites, site, value, date_import=None):
+    site = str(site).strip().upper()
+    value = float(value or 0)
+    if not site or value <= 0:
+        return
+    current = capacites.get(site)
+    if current is None or _parse_import_date(date_import) >= _parse_import_date(_capacity_date(capacites, site)):
+        capacites[site] = {'value': value, 'date': date_import}
+
+def charger_capacites_from_port_data(port_info):
     capacites = {}
+    prefix_caps = {}
     for site, ports in port_info.items():
         if '_TF' in str(site).upper():
             capa = ports.get('port0', 0) + ports.get('port1', 0)
         else:
             capa = max(ports.get('port0', 0), ports.get('port1', 0))
+        date_import = ports.get('date')
         if capa > 0:
-            capacites[site] = capa
+            _set_latest_capacity(capacites, site, capa, date_import)
             prefix = extraire_prefixe(site)
             if prefix and prefix != site:
-                if prefix not in capacites or capacites[prefix] < capa:
-                    capacites[prefix] = capa
+                prefix_caps.setdefault(prefix, {'tdd': 0.0, 'tdd_date': None, 'fdd': 0.0, 'fdd_date': None, 'other': 0.0, 'other_date': None})
+                if est_site_tdd(site):
+                    if capa >= prefix_caps[prefix]['tdd']:
+                        prefix_caps[prefix]['tdd'] = capa
+                        prefix_caps[prefix]['tdd_date'] = date_import
+                elif est_site_fdd(site):
+                    if capa >= prefix_caps[prefix]['fdd']:
+                        prefix_caps[prefix]['fdd'] = capa
+                        prefix_caps[prefix]['fdd_date'] = date_import
+                else:
+                    if capa >= prefix_caps[prefix]['other']:
+                        prefix_caps[prefix]['other'] = capa
+                        prefix_caps[prefix]['other_date'] = date_import
+    for prefix, caps in prefix_caps.items():
+        capa = max(caps['tdd'], caps['fdd'])
+        if capa <= 0:
+            capa = caps['other']
+        date_import = max(
+            _parse_import_date(caps.get('tdd_date')),
+            _parse_import_date(caps.get('fdd_date')),
+            _parse_import_date(caps.get('other_date')),
+        )
+        if capa > 0:
+            _set_latest_capacity(capacites, prefix, capa, date_import)
     return capacites
 
-def charger_coordonnees_gps(file_content) -> dict:
+
+def charger_capacites_from_capacite_site():
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cur = conn.cursor()
+        cur.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'capacite_site')")
+        if not cur.fetchone()[0]:
+            cur.close(); conn.close()
+            return {}
+        cur.execute("""
+            SELECT site, capacite_mbps, date_mise_ajour
+            FROM capacite_site
+            WHERE capacite_mbps > 0
+            ORDER BY date_mise_ajour DESC, id DESC
+        """)
+        rows = cur.fetchall()
+        cur.close(); conn.close()
+
+        capacites = {}
+        for site, capacity, date_import in rows:
+            # ✅ CORRIGÉ : normalisation MAJUSCULES à la lecture, défensive
+            # même si les données en base sont déjà uppercase (capacite.py
+            # les stocke déjà normalisées) -- garantit la cohérence de
+            # casse avec les clés construites côté trafic (eNodeB_Name).
+            site_key = str(site).strip().upper()
+            _set_latest_capacity(capacites, site_key, float(capacity or 0), date_import)
+            prefix = extraire_prefixe(site_key)
+            if prefix and prefix != site_key:
+                _set_latest_capacity(capacites, prefix, float(capacity or 0), date_import)
+        print(f"📡 Capacités depuis capacite_site : {len(capacites)} sites")
+        return capacites
+    except Exception as e:
+        print(f"⚠️ capacités capacite_site : {e}")
+        return {}
+
+
+def fusionner_capacites_priorite_import(port_capacity_map, imported_capacity_map):
+    merged = {}
+    for site in port_capacity_map:
+        _set_latest_capacity(merged, site, _capacity_value(port_capacity_map, site), _capacity_date(port_capacity_map, site))
+    for site in imported_capacity_map:
+        value = _capacity_value(imported_capacity_map, site)
+        if value > 0:
+            merged[str(site).strip().upper()] = {'value': value, 'date': _capacity_date(imported_capacity_map, site)}
+    return merged
+
+# ========== GPS ==========
+
+def charger_coordonnees_gps(file_content):
     if not file_content:
-        print("   📍 Aucun fichier GPS fourni")
         return {}
     try:
-        if isinstance(file_content, bytes):
-            df = pd.read_excel(io.BytesIO(file_content))
-        else:
-            df = pd.read_excel(file_content)
-        print(f"   📍 Fichier GPS chargé: {len(df)} lignes")
+        df = pd.read_excel(io.BytesIO(file_content)) if isinstance(file_content, bytes) else pd.read_excel(file_content)
         df.columns = df.columns.str.strip()
-        site_col = None
-        for col in df.columns:
-            if 'site' in col.lower() or 'enodeb' in col.lower() or 'node' in col.lower():
-                site_col = col
-                break
-        if not site_col:
-            site_col = df.columns[0]
-        lat_col = None
-        lng_col = None
-        for col in df.columns:
-            if 'lat' in col.lower():
-                lat_col = col
-            elif 'lon' in col.lower() or 'long' in col.lower():
-                lng_col = col
+        site_col = next((c for c in df.columns if 'site' in c.lower() or 'enodeb' in c.lower() or 'node' in c.lower()), df.columns[0])
+        lat_col = next((c for c in df.columns if 'lat' in c.lower()), None)
+        lng_col = next((c for c in df.columns if 'lon' in c.lower() or 'long' in c.lower()), None)
         if not lat_col or not lng_col:
-            print("   ⚠️ Colonnes lat/long non trouvées")
             return {}
         coords_dict = {}
         for _, row in df.iterrows():
-            site = str(row[site_col]).strip()
-            if not site or site == 'nan':
+            # ✅ CORRIGÉ : normalisation MAJUSCULES pour matcher les clés
+            # (site_tf, site_tdd, site_fdd, prefix) désormais toutes
+            # uppercase dans traiter_fichiers().
+            site = str(row[site_col]).strip().upper()
+            if not site or site == 'NAN':
                 continue
             try:
-                lat = float(row[lat_col])
-                lng = float(row[lng_col])
+                lat = float(row[lat_col]); lng = float(row[lng_col])
                 if lat != 0 and lng != 0:
                     coords_dict[site] = {'latitude': lat, 'longitude': lng}
             except (ValueError, TypeError):
@@ -150,33 +377,22 @@ def charger_coordonnees_gps(file_content) -> dict:
         print(f"   ✅ GPS chargé: {len(coords_dict)} sites")
         return coords_dict
     except Exception as e:
-        print(f"   ❌ Erreur chargement GPS: {e}")
+        print(f"   ❌ Erreur GPS: {e}")
         return {}
 
-# ========== LECTURE TRAFIC (ROBUSTE) ==========
+# ========== LECTURE TRAFIC ==========
+
 def lire_excel_trafic_directement(file_content: bytes) -> pd.DataFrame:
     df = None
-    # 1. Essayer Excel
     for engine in ['openpyxl', 'xlrd', None]:
         try:
             kw = {'engine': engine} if engine else {}
             df = pd.read_excel(io.BytesIO(file_content), **kw)
-            if df is not None:
-                break
-        except:
+            break
+        except Exception:
             continue
-    # 2. Fallback CSV (séparateur ; ou ,)
     if df is None:
-        try:
-            df = pd.read_csv(io.BytesIO(file_content), sep=';', encoding='utf-8')
-        except:
-            try:
-                df = pd.read_csv(io.BytesIO(file_content), sep=',', encoding='utf-8')
-            except Exception as e:
-                raise ValueError("Impossible de lire le fichier. Vérifiez le format (Excel ou CSV).") from e
-
-    if df is None:
-        raise ValueError("Impossible de lire le fichier Excel. Vérifiez le format.")
+        raise ValueError("Impossible de lire le fichier trafic")
 
     df.columns = df.columns.str.strip()
     rename_map = {}
@@ -184,31 +400,44 @@ def lire_excel_trafic_directement(file_content: bytes) -> pd.DataFrame:
         cl = col.lower()
         if 'enodeb' in cl or ('name' in cl and 'site' not in cl):
             rename_map[col] = 'eNodeB_Name'
-        elif 'maxspeed' in cl or 'rxmaxspeed' in cl or 'mbit' in cl or 'rxmaxspeed_mbs' in cl:
+        elif 'dropcong' in cl and 'downbwnum' in cl:
+            rename_map[col] = 'DropCongDownBWNum'
+        elif 'maxspeed' in cl or 'rxmaxspeed' in cl or 'mbit' in cl:
             rename_map[col] = 'MaxSpeed'
     df = df.rename(columns=rename_map)
+
+    # ✅ CORRIGÉ : normalisation MAJUSCULES du nom de site dès la lecture.
+    # C'est LA cause racine du bug "capacité et état tous faux" : capacite.py
+    # et dropcong.py normalisent déjà systématiquement en majuscules, mais
+    # traitement.py conservait la casse brute du fichier trafic. Si le
+    # fichier trafic contenait "site001_TF" (minuscules/mixte) alors que
+    # capacite_site contenait "SITE001_TF" (majuscules, imposé par
+    # capacite.py), la recherche par clé de dictionnaire Python échouait
+    # silencieusement (clé différente) -> capacité toujours à 0 -> le site
+    # était systématiquement écarté de l'analyse (is_critical=False,
+    # etat_site='NON_EVALUE'), quel que soit son vrai trafic.
+    if 'eNodeB_Name' in df.columns:
+        df['eNodeB_Name'] = df['eNodeB_Name'].astype(str).str.strip().str.upper()
 
     time_col = next((c for c in df.columns if 'time' in c.lower() or 'date' in c.lower()), df.columns[0])
     df['DateTime'] = pd.to_datetime(df[time_col], dayfirst=True, errors='coerce')
     df = df.dropna(subset=['DateTime'])
 
     if 'MaxSpeed' not in df.columns:
-        for col in df.columns:
-            try:
-                test = df[col].iloc[0]
-                if isinstance(test, (int, float)) or str(test).replace(',', '').replace('.', '').isdigit():
-                    df = df.rename(columns={col: 'MaxSpeed'})
-                    break
-            except:
-                continue
-    if 'MaxSpeed' not in df.columns:
         df['MaxSpeed'] = df.iloc[:, -1]
 
     df['MaxSpeed'] = pd.to_numeric(
-        df['MaxSpeed'].astype(str).str.replace(',', '.', regex=False)
-                                  .str.replace(r'[^\d.\-]', '', regex=True),
+        df['MaxSpeed'].astype(str).str.replace(',', '.', regex=False).str.replace(r'[^\d.\-]', '', regex=True),
         errors='coerce'
     )
+    if 'DropCongDownBWNum' not in df.columns:
+        df['DropCongDownBWNum'] = 0
+    else:
+        df['DropCongDownBWNum'] = pd.to_numeric(
+            df['DropCongDownBWNum'].astype(str).str.replace(',', '.', regex=False).str.replace(r'[^\d.\-]', '', regex=True),
+            errors='coerce'
+        ).fillna(0)
+
     df = df.dropna(subset=['MaxSpeed'])
     df = df[df['MaxSpeed'] >= 0]
 
@@ -218,20 +447,46 @@ def lire_excel_trafic_directement(file_content: bytes) -> pd.DataFrame:
     print(f"📊 Trafic chargé : {len(df)} mesures")
     return df
 
+
+def calculer_duree_jours_trafic(df_trafic: pd.DataFrame) -> int:
+    if df_trafic.empty or 'DateTime' not in df_trafic.columns:
+        return 7
+    dates = pd.to_datetime(df_trafic['DateTime'], errors='coerce').dropna()
+    if dates.empty:
+        return 7
+    min_date, max_date = dates.min(), dates.max()
+    if hasattr(min_date, 'to_pydatetime'): min_date = min_date.to_pydatetime()
+    if hasattr(max_date, 'to_pydatetime'): max_date = max_date.to_pydatetime()
+    return max(1, (max_date.date() - min_date.date()).days + 1)
+
 # ========== CHARGEMENT BDD ==========
-def charger_port_data_as_dict() -> dict:
+
+def charger_port_data_as_dict():
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
-        cur.execute("SELECT site, port_no, trafic FROM port_data")
+        suffix_pattern = r'_(LMB|LM2|LM|TDD|TC|TD|TF|FDD|TT|BH|BO|TR|OO|OR)(_[A-Z0-9]+)*$'
+        cur.execute("""
+            SELECT site, port_no, trafic, date_import
+            FROM (
+                SELECT site, port_no, trafic, date_import,
+                       MAX(date_import) OVER (PARTITION BY UPPER(REGEXP_REPLACE(site, %s, '', 'i'))) AS latest_site_date,
+                       ROW_NUMBER() OVER (PARTITION BY UPPER(site), port_no, date_import ORDER BY id DESC) AS row_num
+                FROM port_data
+            ) latest_ports
+            WHERE date_import = latest_site_date AND row_num = 1
+            ORDER BY UPPER(site), port_no
+        """, (suffix_pattern,))
         rows = cur.fetchall()
-        cur.close()
-        conn.close()
+        cur.close(); conn.close()
         port_info = {}
-        for site, port_no, trafic in rows:
-            s = str(site).strip()
+        for site, port_no, trafic, date_import in rows:
+            # ✅ CORRIGÉ : normalisation MAJUSCULES à la lecture (même
+            # raisonnement que charger_capacites_from_capacite_site).
+            s = str(site).strip().upper()
             if s not in port_info:
-                port_info[s] = {'port0': 0, 'port1': 0}
+                port_info[s] = {'port0': 0, 'port1': 0, 'date': None}
+            port_info[s]['date'] = max(_parse_import_date(port_info[s].get('date')), _parse_import_date(date_import))
             if port_no == 0:
                 port_info[s]['port0'] = float(trafic) if trafic else 0
             elif port_no == 1:
@@ -242,21 +497,23 @@ def charger_port_data_as_dict() -> dict:
         print(f"⚠️ port_data : {e}")
         return {}
 
-def charger_type_liaison_as_dict() -> dict:
+
+def charger_type_liaison_as_dict():
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
-        cur.execute("SELECT site, type_trans FROM type_liaison_data")
+        cur.execute("SELECT site, type_trans FROM type_liaison_data ORDER BY date_import DESC, id DESC")
         rows = cur.fetchall()
-        cur.close()
-        conn.close()
+        cur.close(); conn.close()
         type_dict = {}
         for site, type_trans in rows:
-            s = str(site).strip()
+            # ✅ CORRIGÉ : normalisation MAJUSCULES à la lecture.
+            s = str(site).strip().upper()
             val = normaliser_type_trans(type_trans)
-            type_dict[s] = val
+            if s not in type_dict:
+                type_dict[s] = val
             p = extraire_prefixe(s)
-            if p and p != s:
+            if p and p != s and p not in type_dict:
                 type_dict[p] = val
         print(f"📡 Type liaison : {len(type_dict)} entrées")
         return type_dict
@@ -264,29 +521,32 @@ def charger_type_liaison_as_dict() -> dict:
         print(f"⚠️ type_liaison : {e}")
         return {}
 
-def charger_capacite_as_dict() -> dict:
+
+def charger_capacite_as_dict():
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
-        cur.execute("""
-            SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'capacite_site')
-        """)
-        table_exists = cur.fetchone()[0]
-        if not table_exists:
-            cur.close()
-            conn.close()
+        cur.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'capacite_site')")
+        if not cur.fetchone()[0]:
+            cur.close(); conn.close()
             return {}
-        cur.execute("SELECT site, type_trans FROM capacite_site WHERE type_trans IS NOT NULL")
+        cur.execute("""
+            SELECT site, type_trans
+            FROM capacite_site
+            WHERE type_trans IS NOT NULL
+            ORDER BY date_mise_ajour DESC, id DESC
+        """)
         rows = cur.fetchall()
-        cur.close()
-        conn.close()
+        cur.close(); conn.close()
         capacite_dict = {}
         for site, type_trans in rows:
-            s = str(site).strip()
+            # ✅ CORRIGÉ : normalisation MAJUSCULES à la lecture.
+            s = str(site).strip().upper()
             if type_trans:
-                capacite_dict[s] = normaliser_type_trans(str(type_trans))
+                if s not in capacite_dict:
+                    capacite_dict[s] = normaliser_type_trans(str(type_trans))
                 p = extraire_prefixe(s)
-                if p and p != s:
+                if p and p != s and p not in capacite_dict:
                     capacite_dict[p] = normaliser_type_trans(str(type_trans))
         print(f"📡 Capacite_site : {len(capacite_dict)} entrées")
         return capacite_dict
@@ -294,89 +554,208 @@ def charger_capacite_as_dict() -> dict:
         print(f"⚠️ capacite_site : {e}")
         return {}
 
+# ========== MAJ PORT / TYPE LIAISON ==========
+
 def update_port_data(file_content: bytes):
     try:
         df = pd.read_excel(io.BytesIO(file_content))
         df.columns = df.columns.str.strip()
         site_col = next((c for c in df.columns if 'enodeb' in c.lower() or 'name' in c.lower()), df.columns[0])
         port_col = next((c for c in df.columns if 'port' in c.lower()), None)
+        rx_max_col = next((c for c in df.columns if 'rxmaxspeed' in c.lower()), None)
+        total_bw_col = next((c for c in df.columns if 'rxtotalbw' in c.lower() or 'totalbw' in c.lower()), None)
         traf_col = next((c for c in df.columns if 'speed' in c.lower() or 'trafic' in c.lower() or 'mbit' in c.lower()), None)
-        if not port_col or not traf_col:
+        if not port_col or not ((rx_max_col and total_bw_col) or traf_col):
             print("⚠️ Colonnes port introuvables")
             return
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
+        cur.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'port_data')")
+        if not cur.fetchone()[0]:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS port_data (
+                    id SERIAL PRIMARY KEY,
+                    site VARCHAR(255) NOT NULL,
+                    port_no INT NOT NULL,
+                    trafic NUMERIC(15,4),
+                    date_import TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+                )
+            """)
+            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_port_data_site_port ON port_data (site, port_no)")
+            conn.commit()
+            print("   ✅ Table port_data créée")
         n = 0
+        import_date = datetime.now()
         for _, row in df.iterrows():
-            site = str(row[site_col]).strip()
-            if not site or site == 'nan':
+            # ✅ CORRIGÉ : normalisation MAJUSCULES à l'écriture, pour que
+            # port_data soit stocké dans la même casse que capacite_site
+            # (déjà normalisé par capacite.py) et que trafic_historique
+            # (désormais normalisé par lire_excel_trafic_directement).
+            site = str(row[site_col]).strip().upper()
+            if not site or site == 'NAN':
                 continue
             try:
+                capacity = to_float(row[total_bw_col]) if (rx_max_col and total_bw_col) else to_float(row[traf_col])
                 cur.execute("""
                     INSERT INTO port_data (site, port_no, trafic, date_import)
                     VALUES (%s,%s,%s,%s)
-                    ON CONFLICT (site, port_no) DO UPDATE SET trafic=EXCLUDED.trafic
-                """, (site, int(float(row[port_col])),
-                      float(str(row[traf_col]).replace(',', '.')), datetime.now()))
+                    ON CONFLICT (site, port_no) DO UPDATE SET trafic=EXCLUDED.trafic, date_import=EXCLUDED.date_import
+                """, (site, int(float(row[port_col])), capacity, import_date))
                 n += 1
-            except:
+            except Exception:
                 continue
         conn.commit()
-        cur.close()
-        conn.close()
+        cur.close(); conn.close()
         print(f"   ✅ port_data MAJ : {n}")
     except Exception as e:
         print(f"   ❌ port_data: {e}")
+
 
 def update_type_liaison_data(file_content: bytes):
     try:
         df = pd.read_excel(io.BytesIO(file_content))
         df.columns = df.columns.str.strip()
         col_site = next((c for c in df.columns if 'site' in c.lower() or 'node' in c.lower()), df.columns[0])
-        col_type = next((c for c in df.columns if 'type' in c.lower() or 'liaison' in c.lower()),
-                        df.columns[1] if len(df.columns) > 1 else col_site)
+        col_type = next((c for c in df.columns if 'type' in c.lower() or 'liaison' in c.lower()), df.columns[1] if len(df.columns) > 1 else col_site)
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
+        cur.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'type_liaison_data')")
+        if not cur.fetchone()[0]:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS type_liaison_data (
+                    id SERIAL PRIMARY KEY,
+                    site VARCHAR(255) NOT NULL,
+                    type_trans VARCHAR(255),
+                    date_import TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+                )
+            """)
+            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_type_liaison_site ON type_liaison_data (site)")
+            conn.commit()
+            print("   ✅ Table type_liaison_data créée")
         n = 0
         for _, row in df.iterrows():
-            site = str(row[col_site]).strip()
-            if not site or site == 'nan':
+            # ✅ CORRIGÉ : normalisation MAJUSCULES à l'écriture.
+            site = str(row[col_site]).strip().upper()
+            if not site or site == 'NAN':
                 continue
             t = str(row[col_type]).strip()
             if not t:
                 continue
-            cur.execute("""
-                UPDATE type_liaison_data
-                SET type_trans = %s, date_import = %s
-                WHERE site = %s
-            """, (t, datetime.now(), site))
+            cur.execute("UPDATE type_liaison_data SET type_trans=%s, date_import=%s WHERE site=%s", (t, datetime.now(), site))
             if cur.rowcount == 0:
-                cur.execute("""
-                    INSERT INTO type_liaison_data (site, type_trans, date_import)
-                    VALUES (%s, %s, %s)
-                """, (site, t, datetime.now()))
+                cur.execute("INSERT INTO type_liaison_data (site, type_trans, date_import) VALUES (%s,%s,%s)", (site, t, datetime.now()))
             n += 1
         conn.commit()
-        cur.close()
-        conn.close()
+        cur.close(); conn.close()
         print(f"   ✅ type_liaison MAJ : {n}")
     except Exception as e:
         print(f"   ❌ type_liaison: {e}")
+
+# ========== TABLES D'ANALYSE (création idempotente) ==========
+
+def _ensure_analyse_resultat_table(cur):
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS analyse_resultat (
+            id SERIAL PRIMARY KEY,
+            site VARCHAR(255) NOT NULL,
+            classification VARCHAR(50),
+            type_trans VARCHAR(255),
+            max_trafic NUMERIC(15,4),
+            seuil_critique NUMERIC(15,4),
+            nombre_occurrences INT DEFAULT 0,
+            total_measures INT DEFAULT 0,
+            date_max TIMESTAMP WITHOUT TIME ZONE,
+            site_tdd VARCHAR(255),
+            site_fdd VARCHAR(255),
+            somme_fdd_tdd NUMERIC(15,4),
+            date_analyse TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+            latitude DOUBLE PRECISION,
+            longitude DOUBLE PRECISION
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_analyse_resultat_site_date ON analyse_resultat (site, date_analyse)")
+
+    cur.execute("SELECT column_name, is_nullable FROM information_schema.columns WHERE table_name='analyse_resultat' AND column_name='is_critical'")
+    row = cur.fetchone()
+    if row:
+        if row[1] == 'NO':
+            cur.execute("ALTER TABLE analyse_resultat ALTER COLUMN is_critical SET DEFAULT false")
+            cur.execute("UPDATE analyse_resultat SET is_critical = false WHERE is_critical IS NULL")
+    else:
+        cur.execute("ALTER TABLE analyse_resultat ADD COLUMN is_critical BOOLEAN NOT NULL DEFAULT false")
+
+    cur.execute("ALTER TABLE analyse_resultat ADD COLUMN IF NOT EXISTS service_name VARCHAR(50)")
+    cur.execute("ALTER TABLE analyse_resultat ADD COLUMN IF NOT EXISTS data_hash VARCHAR(64)")
+
+
+def _ensure_site_etat_table(cur):
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS site_etat (
+            id SERIAL PRIMARY KEY,
+            site VARCHAR(255) NOT NULL,
+            etat VARCHAR(50),
+            trafic_j NUMERIC(15,4),
+            trafic_j1 NUMERIC(15,4),
+            trafic_j7 NUMERIC(15,4),
+            capacite_mbps NUMERIC(15,4),
+            taux_utilisation NUMERIC(8,2),
+            variation_j1 NUMERIC(8,2),
+            variation_j7 NUMERIC(8,2),
+            date_j DATE,
+            date_calcul TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+        )
+    """)
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_site_etat_site ON site_etat (site)")
+
+    for col, defn in [
+        ('taux_utilisation_tdd', 'NUMERIC(8,2)'),
+        ('taux_utilisation_fdd', 'NUMERIC(8,2)'),
+    ]:
+        cur.execute(f"ALTER TABLE site_etat ADD COLUMN IF NOT EXISTS {col} {defn}")
+
+
+def _ensure_site_alert_table(cur):
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS site_alert (
+            id SERIAL PRIMARY KEY,
+            site VARCHAR(255) NOT NULL,
+            etat VARCHAR(50),
+            trafic_j NUMERIC(15,4),
+            capacite_mbps NUMERIC(15,4),
+            taux_utilisation NUMERIC(8,2),
+            variation_j1 NUMERIC(8,2),
+            variation_j7 NUMERIC(8,2),
+            type_trans VARCHAR(255),
+            classification VARCHAR(50),
+            message TEXT,
+            date_alerte TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_site_alert_site_date ON site_alert (site, date_alerte)")
+
+    for col, defn in [
+        ('taux_utilisation_tdd', 'NUMERIC(8,2)'),
+        ('taux_utilisation_fdd', 'NUMERIC(8,2)'),
+    ]:
+        cur.execute(f"ALTER TABLE site_alert ADD COLUMN IF NOT EXISTS {col} {defn}")
+
+# ========== INSERTION ANALYSE ==========
 
 def inserer_analyse_resultat(sites_data):
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
+        _ensure_analyse_resultat_table(cur)
+        conn.commit()
+
         for col, defn in [
-            ('stats_json', 'JSONB'),
-            ('max_trafic_fdd', 'NUMERIC(15,4)'),
-            ('max_trafic_tdd', 'NUMERIC(15,4)'),
-            ('capacite_mbps', 'NUMERIC(15,4) DEFAULT 0'),
+            ('max_trafic_fdd', 'NUMERIC(15,4)'), ('max_trafic_tdd', 'NUMERIC(15,4)'),
+            ('nombre_occurrences_tdd', 'INT DEFAULT 0'), ('nombre_occurrences_fdd', 'INT DEFAULT 0'),
+            ('capacite_mbps', 'NUMERIC(15,4) DEFAULT 0'), ('duree_jours', 'INT DEFAULT 7'),
+            ('dropcong_tdd', 'INT DEFAULT 0'), ('dropcong_fdd', 'INT DEFAULT 0'), ('dropcong_tf', 'INT DEFAULT 0'),
+            ('taux_utilisation', 'NUMERIC(8,2)'), ('taux_utilisation_tdd', 'NUMERIC(8,2)'), ('taux_utilisation_fdd', 'NUMERIC(8,2)'),
         ]:
-            cur.execute(f"""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name='analyse_resultat' AND column_name='{col}'
-            """)
+            cur.execute(f"SELECT column_name FROM information_schema.columns WHERE table_name='analyse_resultat' AND column_name='{col}'")
             if not cur.fetchone():
                 cur.execute(f"ALTER TABLE analyse_resultat ADD COLUMN {col} {defn}")
                 conn.commit()
@@ -389,32 +768,26 @@ def inserer_analyse_resultat(sites_data):
                 INSERT INTO analyse_resultat
                 (site, classification, type_trans, max_trafic, seuil_critique,
                  nombre_occurrences, total_measures, date_max, site_tdd, site_fdd,
-                 somme_fdd_tdd, date_analyse, latitude, longitude,
-                 max_trafic_fdd, max_trafic_tdd, capacite_mbps)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                 somme_fdd_tdd, date_analyse, latitude, longitude, duree_jours,
+                 max_trafic_fdd, max_trafic_tdd, nombre_occurrences_tdd,
+                 nombre_occurrences_fdd, capacite_mbps, dropcong_tdd,
+                 dropcong_fdd, dropcong_tf, taux_utilisation, taux_utilisation_tdd, taux_utilisation_fdd)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """, (
-                to_py(site.get('Site')),
-                to_py(site.get('Classification')),
-                to_py(site.get('Type_Trans')),
-                to_py(site.get('Max_Trafic_Final', 0)),
-                to_py(site.get('Seuil_Critique', 0)),
-                to_py(site.get('Nombre_Occurrences', 0)),
-                to_py(site.get('Total_Measures', 0)),
-                to_py(site.get('Date_Max')),
-                to_py(site.get('Site_TDD')),
-                to_py(site.get('Site_FDD')),
-                to_py(site.get('Somme_FDD_TDD')),
-                date_analyse,
-                to_py(site.get('Latitude')),
-                to_py(site.get('Longitude')),
-                to_py(site.get('Max_Trafic_FDD', 0)),
-                to_py(site.get('Max_Trafic_TDD', 0)),
-                to_py(site.get('Capacite_Mbps', 0)),
+                to_py(site.get('Site')), to_py(site.get('Classification')), to_py(site.get('Type_Trans')),
+                to_py(site.get('Max_Trafic_Final', 0)), to_py(site.get('Seuil_Critique', 0)),
+                to_py(site.get('Nombre_Occurrences', 0)), to_py(site.get('Total_Measures', 0)),
+                to_py(site.get('Date_Max')), to_py(site.get('Site_TDD')), to_py(site.get('Site_FDD')),
+                to_py(site.get('Somme_FDD_TDD')), date_analyse, to_py(site.get('Latitude')), to_py(site.get('Longitude')),
+                to_py(site.get('Duree_Jours', 7)), to_py(site.get('Max_Trafic_FDD', 0)), to_py(site.get('Max_Trafic_TDD', 0)),
+                to_py(site.get('Nombre_Occurrences_TDD', 0)), to_py(site.get('Nombre_Occurrences_FDD', 0)),
+                to_py(site.get('Capacite_Mbps', 0)), to_py(site.get('DropCong_TDD', 0)), to_py(site.get('DropCong_FDD', 0)),
+                to_py(site.get('DropCong_TF', 0)), to_py(site.get('taux_utilisation')),
+                to_py(site.get('taux_utilisation_tdd')), to_py(site.get('taux_utilisation_fdd')),
             ))
             count += 1
         conn.commit()
-        cur.close()
-        conn.close()
+        cur.close(); conn.close()
         print(f"✅ {count} lignes insérées dans analyse_resultat")
         return count
     except Exception as e:
@@ -422,161 +795,205 @@ def inserer_analyse_resultat(sites_data):
         traceback.print_exc()
         return 0
 
-def inserer_trafic_historique(sites_data):
-    try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cur = conn.cursor()
-        date_jour = datetime.now().date()
-        count = 0
+# ========== HISTORIQUE TRAFIC ==========
+
+def _ensure_trafic_historique_table(cur):
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS trafic_historique (
+            id SERIAL PRIMARY KEY,
+            site VARCHAR(255) NOT NULL,
+            date_heure TIMESTAMP WITHOUT TIME ZONE NOT NULL
+        )
+    """)
+    for col, defn in [
+        ('date_jour', 'DATE'),
+        ('max_trafic', 'NUMERIC(15,4)'),
+        ('capacite_mbps', 'NUMERIC(15,4)'),
+        ('max_speed', 'NUMERIC(15,4)'),
+        ('date_importation', 'TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()'),
+    ]:
+        cur.execute(f"ALTER TABLE trafic_historique ADD COLUMN IF NOT EXISTS {col} {defn}")
+
+    cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='trafic_historique' AND column_name='trafic'")
+    if cur.fetchone():
         cur.execute("""
-            SELECT column_name FROM information_schema.columns 
-            WHERE table_name = 'trafic_historique' AND column_name = 'date_jour'
+            UPDATE trafic_historique
+            SET max_speed = COALESCE(max_speed, trafic),
+                max_trafic = COALESCE(max_trafic, trafic)
+            WHERE max_speed IS NULL
         """)
-        has_date_jour = cur.fetchone() is not None
-        for site in sites_data:
-            site_name = site.get('Site')
-            max_trafic = site.get('Max_Trafic_Final', 0)
-            capacite = site.get('Capacite_Mbps', 0)
-            classification = site.get('Classification', '')
-            type_trans = site.get('Type_Trans', '')
-            if not site_name:
-                continue
-            if has_date_jour:
-                cur.execute("""
-                    INSERT INTO trafic_historique 
-                        (site, date_jour, max_trafic, capacite_mbps, classification, type_trans)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (site, date_jour) DO UPDATE SET
-                        max_trafic = EXCLUDED.max_trafic,
-                        capacite_mbps = EXCLUDED.capacite_mbps,
-                        classification = EXCLUDED.classification,
-                        type_trans = EXCLUDED.type_trans
-                """, (site_name, date_jour, float(max_trafic), float(capacite), classification, type_trans))
-            else:
-                continue
-            count += 1
-        conn.commit()
-        cur.close()
-        conn.close()
-        print(f"✅ Historique inséré : {count} sites")
-        return count
-    except Exception as e:
-        print(f"⚠️ Erreur insertion historique : {e}")
-        traceback.print_exc()
-        return 0
+
+    cur.execute("""
+        UPDATE trafic_historique
+        SET date_jour = date_heure::date
+        WHERE date_jour IS NULL
+    """)
+
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_trafic_historique_site_heure ON trafic_historique (site, date_heure)")
+
 
 def inserer_trafic_historique_brut(df_trafic: pd.DataFrame) -> int:
+    """
+    Insère les mesures brutes PAR SITE (donc par port, TDD et FDD restent
+    des lignes distinctes puisque eNodeB_Name diffère selon le suffixe) —
+    ceci permet ensuite de reconstituer trafic TDD seul, FDD seul, ou les
+    deux simultanément, sans perte d'information.
+    """
     try:
         if df_trafic.empty:
             return 0
+
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
+        _ensure_trafic_historique_table(cur)
+        conn.commit()
+
         date_import = datetime.now()
-        count = 0
         raw = df_trafic[['eNodeB_Name', 'DateTime', 'MaxSpeed']].copy()
         raw['eNodeB_Name'] = raw['eNodeB_Name'].astype(str).str.strip()
         raw = raw.dropna(subset=['DateTime', 'MaxSpeed'])
         raw = raw[raw['eNodeB_Name'] != '']
         raw = raw.drop_duplicates(subset=['eNodeB_Name', 'DateTime'], keep='last')
-        sites = raw['eNodeB_Name'].dropna().unique().tolist()
-        min_date = raw['DateTime'].min()
-        max_date = raw['DateTime'].max()
-        if hasattr(min_date, 'to_pydatetime'):
-            min_date = min_date.to_pydatetime()
-        if hasattr(max_date, 'to_pydatetime'):
-            max_date = max_date.to_pydatetime()
-        if sites:
-            cur.execute(
-                """
-                DELETE FROM trafic_historique
-                WHERE site = ANY(%s)
-                  AND date_heure BETWEEN %s AND %s
-                """,
-                (sites, min_date, max_date)
-            )
+
         rows = []
         for row in raw.itertuples(index=False):
             date_heure = row.DateTime
             if hasattr(date_heure, 'to_pydatetime'):
                 date_heure = date_heure.to_pydatetime()
-            rows.append((str(row.eNodeB_Name).strip(), date_heure, float(row.MaxSpeed), date_import))
+            rows.append((
+                str(row.eNodeB_Name).strip(),
+                date_heure.date(),
+                float(row.MaxSpeed),
+                None,
+                float(row.MaxSpeed),
+                date_heure,
+                date_import,
+            ))
+
+        count = 0
         if rows:
             execute_values(
                 cur,
                 """
                 INSERT INTO trafic_historique
-                    (site, date_heure, max_speed, date_importation)
+                    (site, date_jour, max_trafic, capacite_mbps, max_speed, date_heure, date_importation)
                 VALUES %s
+                ON CONFLICT (site, date_heure) DO UPDATE SET
+                    max_trafic = EXCLUDED.max_trafic,
+                    max_speed = EXCLUDED.max_speed,
+                    date_importation = EXCLUDED.date_importation
                 """,
                 rows,
                 page_size=10000
             )
             count = len(rows)
+
         conn.commit()
-        cur.close()
-        conn.close()
-        print(f"✅ Historique brut inséré : {count} mesures")
+        cur.close(); conn.close()
+        print(f"✅ Historique brut inséré : {count} mesures (historique conservé)")
         return count
     except Exception as e:
         print(f"⚠️ Erreur insertion historique brut : {e}")
         traceback.print_exc()
         return 0
 
-# ========== ANALYSE ÉTATS ET ALERTES ==========
-def variation_pct(a: float, b: float) -> float:
+# ========== ÉTATS ET ALERTES ==========
+
+def variation_pct(a, b):
     if a <= 0:
         return 0
     return abs(a - b) / a
 
-def est_stable(a: float, b: float, seuil: float = SEUIL_STABILITE_MONTANT) -> bool:
-    reference = max(a, b, 1.0)
-    return abs(a - b) / reference <= seuil
-
-def calculer_etat(trafic_j: float, trafic_j1: float, trafic_j7: float, capacite: float) -> tuple:
-    taux = (trafic_j / capacite * 100) if capacite > 0 else 0
-    var_j1 = variation_pct(trafic_j, trafic_j1) * 100
-    var_j7 = variation_pct(trafic_j, trafic_j7) * 100
-    if capacite <= 0:
-        return 'OK', taux, var_j1, var_j7
-    if trafic_j >= capacite * SEUIL_CONGESTION and est_stable(trafic_j, trafic_j1):
-        if trafic_j1 >= trafic_j7:
-            return 'CONGESTIONNE', taux, var_j1, var_j7
-    if trafic_j7 > trafic_j1 and est_stable(trafic_j, trafic_j1):
-        return 'BRIDE', taux, var_j1, var_j7
-    return 'OK', taux, var_j1, var_j7
-
-def type_trans_manquant(type_trans: str) -> bool:
+def type_trans_manquant(type_trans):
     if type_trans is None:
         return True
     valeur = str(type_trans).strip().upper()
     return valeur in ('', 'NON_DEFINI', 'NONE', 'N/A', 'NA', '-')
 
-def construire_message_alerte(etat: str, nom: str, trafic_j: float, capacite: float, taux: float, type_trans: str) -> str:
+def construire_message_alerte(etat, nom, trafic_j, capacite, taux, type_trans):
     if etat == 'SANS_TYPE':
-        detail_type = 'type de liaison non defini'
-        if type_trans and str(type_trans).strip():
-            detail_type = f'type de liaison manquant ({str(type_trans).strip()})'
-        return f"⚪ SITE SANS TYPE - {nom}: {detail_type}"
-    if etat == 'CONGESTIONNE':
+        detail = f'type de liaison manquant ({str(type_trans).strip()})' if type_trans and str(type_trans).strip() else 'type de liaison non defini'
+        return f"⚪ SITE SANS TYPE - {nom}: {detail}"
+    if etat in ('A_VERIFIER_CAPACITE', 'CAPACITE_A_VERIFIER'):
+        return f"🔴 CAPACITE A VERIFIER - {nom}: {trafic_j:.0f}/{capacite:.0f} Mbps ({taux:.1f}%)"
+    if etat == 'RISQUE_DE_CONGESTION':
+        return f"🟠 RISQUE DE CONGESTION - {nom}: {trafic_j:.0f}/{capacite:.0f} Mbps ({taux:.1f}%, occurrences < {SEUIL_OCCURRENCES_RISQUE_CONGESTION})"
+    if etat in ('CONGESTIONNE', 'CONGESTION'):
         return f"🔴 CONGESTION - {nom}: {trafic_j:.0f}/{capacite:.0f} Mbps ({taux:.1f}%)"
-    return f"🟠 BRIDAGE - {nom}: trafic stable {trafic_j:.0f} Mbps ({taux:.1f}% capacité)"
+    if etat == 'CONGESTION(FDD)':
+        return f"🔴 CONGESTION FDD - {nom}: taux FDD {taux:.1f}%"
+    if etat == 'CONGESTION(TDD)':
+        return f"🔴 CONGESTION TDD - {nom}: taux TDD {taux:.1f}%"
+    return f"🟠 BRIDAGE - {nom}: {trafic_j:.0f}/{capacite:.0f} Mbps ({taux:.1f}%, occurrences >= {SEUIL_OCCURRENCES_BRIDAGE})"
+
+
+def calculer_etat_avance(trafic_j, trafic_j1, trafic_j7, capacite, occurrences, classification,
+                          occ_tdd=0, occ_fdd=0, taux_tdd=None, taux_fdd=None):
+    classification = (classification or '').upper().strip()
+    occurrences = int(occurrences or 0)
+    occ_tdd = int(occ_tdd or 0)
+    occ_fdd = int(occ_fdd or 0)
+    taux_tdd_val = float(taux_tdd or 0)
+    taux_fdd_val = float(taux_fdd or 0)
+
+    taux = (trafic_j / capacite * 100) if capacite > 0 else 0
+    var_j1 = variation_pct(trafic_j, trafic_j1) * 100
+    var_j7 = variation_pct(trafic_j, trafic_j7) * 100
+
+    if classification in ('COTRANS', 'NO_COTRANS'):
+        fdd_congest = taux_fdd_val >= SEUIL_CONGESTION * 100 and occ_fdd >= SEUIL_OCCURRENCES_RISQUE_CONGESTION
+        tdd_congest = taux_tdd_val >= SEUIL_CONGESTION * 100 and occ_tdd >= SEUIL_OCCURRENCES_RISQUE_CONGESTION
+        if fdd_congest and tdd_congest:
+            return 'CONGESTION', taux, var_j1, var_j7
+        if fdd_congest:
+            return 'CONGESTION(FDD)', taux, var_j1, var_j7
+        if tdd_congest:
+            return 'CONGESTION(TDD)', taux, var_j1, var_j7
+        if ((taux_fdd_val >= SEUIL_CONGESTION * 100 and occ_fdd < SEUIL_OCCURRENCES_RISQUE_CONGESTION)
+                or (taux_tdd_val >= SEUIL_CONGESTION * 100 and occ_tdd < SEUIL_OCCURRENCES_RISQUE_CONGESTION)):
+            return 'RISQUE_DE_CONGESTION', taux, var_j1, var_j7
+        return 'OK', taux, var_j1, var_j7
+
+    if capacite <= 0:
+        return 'OK', taux, var_j1, var_j7
+
+    if (classification != 'TF' and abs(capacite - CAPACITE_10G_MBPS) < 1.0
+            and taux >= SEUIL_CONGESTION * 100 and occurrences >= SEUIL_OCCURRENCES_RISQUE_CONGESTION):
+        return 'BRIDAGE', taux, var_j1, var_j7
+
+    if taux >= SEUIL_CONGESTION * 100 and occurrences >= SEUIL_OCCURRENCES_RISQUE_CONGESTION:
+        return 'CONGESTION', taux, var_j1, var_j7
+    if taux >= SEUIL_CONGESTION * 100 and occurrences < SEUIL_OCCURRENCES_RISQUE_CONGESTION:
+        return 'RISQUE_DE_CONGESTION', taux, var_j1, var_j7
+    if taux < SEUIL_CONGESTION * 100 and occurrences >= SEUIL_OCCURRENCES_BRIDAGE:
+        return 'BRIDAGE', taux, var_j1, var_j7
+    return 'OK', taux, var_j1, var_j7
 
 def analyser_etats_et_alertes(sites_data: list) -> int:
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
+        _ensure_site_etat_table(cur)
+        _ensure_site_alert_table(cur)
+        conn.commit()
+
+        cur.execute("DELETE FROM site_alert WHERE type_trans != 'IA_ANOMALY'")
+        conn.commit()
+
         date_j = datetime.now().date()
         date_j1 = date_j - timedelta(days=1)
         date_j7 = date_j - timedelta(days=7)
         date_j1_next = date_j1 + timedelta(days=1)
         date_j7_next = date_j7 + timedelta(days=1)
+
         cur.execute("""
             SELECT site, date_heure::date AS date_jour, MAX(max_speed) AS max_trafic
-            FROM trafic_historique 
+            FROM trafic_historique
             WHERE (date_heure >= %s AND date_heure < %s)
                OR (date_heure >= %s AND date_heure < %s)
             GROUP BY site, date_heure::date
         """, (date_j1, date_j1_next, date_j7, date_j7_next))
+
         hist = {}
         for site, dj, mt in cur.fetchall():
             trafic = float(mt or 0)
@@ -585,62 +1002,125 @@ def analyser_etats_et_alertes(sites_data: list) -> int:
                     continue
                 hist.setdefault(key, {})
                 hist[key][dj] = max(hist[key].get(dj, 0), trafic)
+
+        etats_critiques = {'CONGESTION', 'CONGESTION(FDD)', 'CONGESTION(TDD)', 'BRIDAGE'}
         alertes_count = 0
+        erreurs_persistance = 0
+
         for site in sites_data:
             nom = site.get('Site')
             trafic_j = float(site.get('Max_Trafic_Final', 0) or 0)
             capacite = float(site.get('Capacite_Mbps', 0) or 0)
             type_trans = site.get('Type_Trans', '')
             classification = site.get('Classification', '')
+            occurrences = int(site.get('Nombre_Occurrences', 0) or 0)
+            occ_tdd = int(site.get('Nombre_Occurrences_TDD', 0) or 0)
+            occ_fdd = int(site.get('Nombre_Occurrences_FDD', 0) or 0)
+            taux_tdd = site.get('taux_utilisation_tdd')
+            taux_fdd = site.get('taux_utilisation_fdd')
+
             if not nom or trafic_j <= 0 or capacite <= 0:
+                site['etat_site'] = site.get('etat_site', 'NON_EVALUE')
+                site['site_status'] = site.get('site_status', 'NON_EVALUE')
+                site['is_critical'] = site.get('is_critical', False)
                 continue
+
             trafic_j1 = hist.get(nom, {}).get(date_j1, 0)
             trafic_j7 = hist.get(nom, {}).get(date_j7, 0)
-            etat, taux, var_j1, var_j7 = calculer_etat(trafic_j, trafic_j1, trafic_j7, capacite)
-            cur.execute("""
-                INSERT INTO site_etat 
-                    (site, etat, trafic_j, trafic_j1, trafic_j7, capacite_mbps,
-                     taux_utilisation, variation_j1, variation_j7, date_j)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (site) DO UPDATE SET
-                    etat = EXCLUDED.etat,
-                    trafic_j = EXCLUDED.trafic_j,
-                    trafic_j1 = EXCLUDED.trafic_j1,
-                    trafic_j7 = EXCLUDED.trafic_j7,
-                    capacite_mbps = EXCLUDED.capacite_mbps,
-                    taux_utilisation = EXCLUDED.taux_utilisation,
-                    variation_j1 = EXCLUDED.variation_j1,
-                    variation_j7 = EXCLUDED.variation_j7,
-                    date_j = EXCLUDED.date_j,
-                    date_calcul = NOW()
-            """, (nom, etat, trafic_j, trafic_j1, trafic_j7, capacite,
-                  round(taux, 2), round(var_j1, 2), round(var_j7, 2), date_j))
-            alerte_a_creer = []
-            if type_trans_manquant(type_trans):
-                alerte_a_creer.append('SANS_TYPE')
-            if etat in ('CONGESTIONNE', 'BRIDE'):
-                alerte_a_creer.append(etat)
-            for etat_alerte in alerte_a_creer:
+
+            etat, taux, var_j1, var_j7 = calculer_etat_avance(
+                trafic_j, trafic_j1, trafic_j7, capacite, occurrences,
+                classification, occ_tdd, occ_fdd, taux_tdd, taux_fdd
+            )
+
+            taux_global_db = None if (classification or '').upper() in ('COTRANS', 'NO_COTRANS') else (round(taux, 2) if taux else None)
+            type_manquant = type_trans_manquant(type_trans)
+
+            if etat in etats_critiques or etat == 'RISQUE_DE_CONGESTION':
+                etat_affiche = etat
+                site_status = 'CRITIQUE' if etat in etats_critiques else 'SURVEILLANCE'
+            elif type_manquant:
+                etat_affiche = 'SANS_TYPE'
+                site_status = 'SURVEILLANCE'
+            else:
+                etat_affiche = etat
+                site_status = 'SECURISE'
+
+            site['etat_site'] = etat_affiche
+            site['site_status'] = site_status
+            site['is_critical'] = etat in etats_critiques
+
+            try:
+                cur.execute("SAVEPOINT site_sp")
+
                 cur.execute("""
-                SELECT id FROM site_alert
-                WHERE site = %s
-                  AND etat = %s
-                  AND date_alerte::date = %s
-                LIMIT 1
-            """, (nom, etat_alerte, date_j))
-                if not cur.fetchone():
-                    msg = construire_message_alerte(etat_alerte, nom, trafic_j, capacite, taux, type_trans)
-                    cur.execute("""
-                        INSERT INTO site_alert 
-                            (site, etat, trafic_j, capacite_mbps, taux_utilisation,
-                             variation_j1, variation_j7, type_trans, classification, message)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """, (nom, etat_alerte, trafic_j, capacite, round(taux, 2),
-                          round(var_j1, 2), round(var_j7, 2), type_trans, classification, msg))
-                    alertes_count += 1
+                    INSERT INTO site_etat
+                        (site, etat, trafic_j, trafic_j1, trafic_j7, capacite_mbps,
+                         taux_utilisation, variation_j1, variation_j7, date_j,
+                         taux_utilisation_tdd, taux_utilisation_fdd)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT (site) DO UPDATE SET
+                        etat=EXCLUDED.etat, trafic_j=EXCLUDED.trafic_j, trafic_j1=EXCLUDED.trafic_j1,
+                        trafic_j7=EXCLUDED.trafic_j7, capacite_mbps=EXCLUDED.capacite_mbps,
+                        taux_utilisation=EXCLUDED.taux_utilisation, variation_j1=EXCLUDED.variation_j1,
+                        variation_j7=EXCLUDED.variation_j7, date_j=EXCLUDED.date_j,
+                        taux_utilisation_tdd=EXCLUDED.taux_utilisation_tdd,
+                        taux_utilisation_fdd=EXCLUDED.taux_utilisation_fdd, date_calcul=NOW()
+                """, (nom, etat, trafic_j, trafic_j1, trafic_j7, capacite,
+                      taux_global_db, round(var_j1, 2), round(var_j7, 2), date_j, taux_tdd, taux_fdd))
+
+                alertes_a_creer = []
+                if type_manquant:
+                    alertes_a_creer.append('SANS_TYPE')
+                if etat in ('A_VERIFIER_CAPACITE', 'RISQUE_DE_CONGESTION', 'CONGESTION',
+                            'CONGESTION(FDD)', 'CONGESTION(TDD)', 'BRIDAGE'):
+                    alertes_a_creer.append(etat)
+
+                for etat_alerte in alertes_a_creer:
+                    cur.execute("SELECT id FROM site_alert WHERE site=%s AND etat=%s AND date_alerte::date=%s LIMIT 1", (nom, etat_alerte, date_j))
+                    if not cur.fetchone():
+                        msg = construire_message_alerte(etat_alerte, nom, trafic_j, capacite, taux, type_trans)
+                        cur.execute("""
+                            INSERT INTO site_alert
+                                (site, etat, trafic_j, capacite_mbps, taux_utilisation,
+                                 variation_j1, variation_j7, type_trans, classification, message,
+                                 taux_utilisation_tdd, taux_utilisation_fdd)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        """, (nom, etat_alerte, trafic_j, capacite, taux_global_db,
+                              round(var_j1, 2), round(var_j7, 2), type_trans, classification, msg, taux_tdd, taux_fdd))
+                        alertes_count += 1
+
+                cur.execute("RELEASE SAVEPOINT site_sp")
+            except Exception as e_site:
+                cur.execute("ROLLBACK TO SAVEPOINT site_sp")
+                erreurs_persistance += 1
+                print(f"   ⚠️ Erreur persistance pour le site {nom}: {e_site}")
+
         conn.commit()
-        cur.close()
-        conn.close()
+
+        cur.execute("SELECT MAX(date_analyse) FROM analyse_resultat")
+        last_date = cur.fetchone()[0]
+        if last_date:
+            for site in sites_data:
+                nom = site.get('Site')
+                if not nom:
+                    continue
+                try:
+                    cur.execute("SAVEPOINT crit_sp")
+                    cur.execute("""
+                        UPDATE analyse_resultat
+                        SET is_critical = %s
+                        WHERE date_analyse = %s AND site = %s
+                    """, (bool(site.get('is_critical', False)), last_date, nom))
+                    cur.execute("RELEASE SAVEPOINT crit_sp")
+                except Exception as e_update:
+                    cur.execute("ROLLBACK TO SAVEPOINT crit_sp")
+                    print(f"   ⚠️ Erreur MAJ is_critical pour le site {nom}: {e_update}")
+            conn.commit()
+
+        cur.close(); conn.close()
+        if erreurs_persistance:
+            print(f"   ⚠️ {erreurs_persistance} site(s) non persistés en base (voir erreurs ci-dessus)")
         print(f"   🔔 Alertes insérées: {alertes_count}")
         return alertes_count
     except Exception as e:
@@ -649,84 +1129,64 @@ def analyser_etats_et_alertes(sites_data: list) -> int:
         return 0
 
 # ========== TRAITEMENT PRINCIPAL ==========
-def traiter_fichiers(file_trafic_content, file_port_content=None,
-                     file_type_content=None, file_gps_content=None):
+
+def traiter_fichiers(file_trafic_content, file_port_content=None, file_type_content=None, file_gps_content=None):
     import time
     start_total = time.time()
     print("📂 Début du traitement...")
+
     try:
-        start = time.time()
         df_trafic = lire_excel_trafic_directement(file_trafic_content)
-        print(f"   ✅ Lecture trafic : {time.time()-start:.2f}s")
         if df_trafic.empty:
             return {"status": "error", "message": "Aucune donnée valide"}
 
-        # Mise à jour des tables optionnelles
-        if file_port_content:
-            start = time.time()
-            update_port_data(file_port_content)
-            print(f"   ✅ port_data : {time.time()-start:.2f}s")
-        if file_type_content:
-            start = time.time()
-            update_type_liaison_data(file_type_content)
-            print(f"   ✅ type_liaison : {time.time()-start:.2f}s")
+        duree_jours = calculer_duree_jours_trafic(df_trafic)
+        print(f"   Duree analyse : {duree_jours} jour(s)")
 
-        # Chargement des données depuis la BDD
-        start = time.time()
+        if file_port_content:
+            update_port_data(file_port_content)
+        if file_type_content:
+            update_type_liaison_data(file_type_content)
+
         port_info = charger_port_data_as_dict()
         type_dict = charger_type_liaison_as_dict()
         capacite_dict = charger_capacite_as_dict()
         capacites_from_ports = charger_capacites_from_port_data(port_info)
-        print(f"   ✅ BDD chargée : {time.time()-start:.2f}s")
-        print(f"   📡 Capacités depuis port_data : {len(capacites_from_ports)} sites")
+        capacites_from_capacite_site = charger_capacites_from_capacite_site()
+        capacites_from_ports = fusionner_capacites_priorite_import(capacites_from_ports, capacites_from_capacite_site)
 
-        # GPS
         coords_dict = charger_coordonnees_gps(file_gps_content) if file_gps_content else {}
-        print(f"   📍 GPS chargé: {len(coords_dict)} sites")
-        print(f"📄 Trafic : {len(df_trafic)} mesures")
-        print("\n📊 CLASSIFICATION...")
 
-        # Préparation des données pour la classification
         df_trafic['Prefixe'] = df_trafic['eNodeB_Name'].apply(extraire_prefixe)
         empty_trafic = pd.DataFrame(columns=df_trafic.columns)
         trafic_by_site = {site: group for site, group in df_trafic.groupby('eNodeB_Name', sort=False)}
-        trafic_names_by_prefix = {prefix: list(values) for prefix, values in df_trafic.groupby('Prefixe', sort=False)['eNodeB_Name'].unique().items()}
+        trafic_names_by_prefix = {p: list(v) for p, v in df_trafic.groupby('Prefixe', sort=False)['eNodeB_Name'].unique().items()}
         port_names_by_prefix = {}
         for site in port_info.keys():
             port_names_by_prefix.setdefault(extraire_prefixe(site), []).append(site)
 
-        prefixes_trafic = set(trafic_names_by_prefix.keys())
-        prefixes_port = set(port_names_by_prefix.keys())
-        prefixes_uniques = [p for p in (prefixes_trafic | prefixes_port) if p]
+        prefixes_uniques = [p for p in (set(trafic_names_by_prefix.keys()) | set(port_names_by_prefix.keys())) if p]
         print(f"📌 Préfixes uniques : {len(prefixes_uniques)}")
 
         resultats = {}
-        for i, prefix in enumerate(prefixes_uniques):
-            if (i + 1) % 500 == 0:
-                print(f"   Traitement {i+1}/{len(prefixes_uniques)}...")
 
+        for prefix in prefixes_uniques:
             noms_trafic = trafic_names_by_prefix.get(prefix, [])
             noms_port = port_names_by_prefix.get(prefix, [])
             tous_noms = list(set(noms_trafic + noms_port))
             if not tous_noms:
                 continue
 
-            site_fdd = None
-            site_tdd = None
-            site_tf = None
-            site_simple = None
+            site_fdd = site_tdd = site_tf = site_simple = None
             has_known_suffix = False
             for nom in tous_noms:
                 n = str(nom)
                 if est_site_tf(n):
-                    site_tf = n
-                    has_known_suffix = True
+                    site_tf = n; has_known_suffix = True
                 elif est_site_tdd(n):
-                    site_tdd = n
-                    has_known_suffix = True
+                    site_tdd = n; has_known_suffix = True
                 elif est_site_fdd(n):
-                    site_fdd = n
-                    has_known_suffix = True
+                    site_fdd = n; has_known_suffix = True
                 else:
                     site_simple = n
 
@@ -750,8 +1210,7 @@ def traiter_fichiers(file_trafic_content, file_port_content=None,
                 if candidate:
                     t = get_type_trans_for_prefix(extraire_prefixe(candidate), type_dict, capacite_dict)
                     if t != 'NON_DEFINI':
-                        type_trans = t
-                        break
+                        type_trans = t; break
             if type_trans == 'NON_DEFINI':
                 type_trans = get_type_trans_for_prefix(prefix, type_dict, capacite_dict)
 
@@ -759,26 +1218,37 @@ def traiter_fichiers(file_trafic_content, file_port_content=None,
             tdd_data = trafic_by_site.get(site_tdd, empty_trafic) if site_tdd else empty_trafic
             tf_data = trafic_by_site.get(site_tf, empty_trafic) if site_tf else empty_trafic
             simple_data = trafic_by_site.get(site_simple, empty_trafic) if site_simple else empty_trafic
+            dropcong_tdd = max_dropcong(tdd_data)
+            dropcong_fdd = max_dropcong(fdd_data)
+            dropcong_tf = max_dropcong(tf_data)
+            if dropcong_fdd <= 0 and not simple_data.empty:
+                dropcong_fdd = max_dropcong(simple_data)
 
             max_fdd = max_tdd = max_final = seuil = 0.0
             occ = total_measures = 0
+            occ_tdd = calculer_nombre_occurrences(tdd_data)
+            occ_fdd = calculer_nombre_occurrences(fdd_data)
             date_max = somme_fdd_tdd = None
-            capacite_mbps = 0.0
-            if site_tf and site_tf in capacites_from_ports:
-                capacite_mbps = capacites_from_ports[site_tf]
-            elif prefix in capacites_from_ports:
-                capacite_mbps = capacites_from_ports[prefix]
-            elif site_fdd and site_fdd in capacites_from_ports:
-                capacite_mbps = capacites_from_ports[site_fdd]
-            elif site_tdd and site_tdd in capacites_from_ports:
-                capacite_mbps = capacites_from_ports[site_tdd]
 
-            lat, lng = None, None
+            capacite_tdd_mbps, capacite_fdd_mbps = resolve_capacites_tdd_fdd(
+                classification, site_tf, site_tdd, site_fdd, site_simple, prefix, capacites_from_ports
+            )
+            capacite_fallback = 0.0
+            if site_tf and site_tf in capacites_from_ports:
+                capacite_fallback = _capacity_value(capacites_from_ports, site_tf)
+            elif prefix in capacites_from_ports:
+                capacite_fallback = _capacity_value(capacites_from_ports, prefix)
+            elif site_fdd and site_fdd in capacites_from_ports:
+                capacite_fallback = _capacity_value(capacites_from_ports, site_fdd)
+            elif site_tdd and site_tdd in capacites_from_ports:
+                capacite_fallback = _capacity_value(capacites_from_ports, site_tdd)
+            capacite_mbps = effective_capacity_for_utilization(classification, capacite_tdd_mbps, capacite_fdd_mbps, capacite_fallback)
+
+            lat = lng = None
             if coords_dict:
-                for nom_candidat in [site_tf, site_fdd, site_tdd, site_simple, prefix]:
-                    if nom_candidat and nom_candidat in coords_dict:
-                        lat = coords_dict[nom_candidat]['latitude']
-                        lng = coords_dict[nom_candidat]['longitude']
+                for cand in [site_tf, site_fdd, site_tdd, site_simple, prefix]:
+                    if cand and cand in coords_dict:
+                        lat, lng = coords_dict[cand]['latitude'], coords_dict[cand]['longitude']
                         break
 
             if classification == '-':
@@ -788,6 +1258,7 @@ def traiter_fichiers(file_trafic_content, file_port_content=None,
                     max_final = max_val
                     seuil = max_val * 0.9
                     occ = int((ref['MaxSpeed'] >= seuil).sum())
+                    occ_fdd = occ
                     date_max = ref.loc[ref['MaxSpeed'].idxmax(), 'DateTime'].strftime('%Y-%m-%d %H:%M:%S')
                     total_measures = len(ref)
             elif classification == 'TF' and not tf_data.empty:
@@ -855,29 +1326,37 @@ def traiter_fichiers(file_trafic_content, file_port_content=None,
                     max_final = max_val
                     seuil = max_val * 0.9
                     occ = int((ref['MaxSpeed'] >= seuil).sum())
+                    if not fdd_data.empty:
+                        occ_fdd = occ
+                    elif not tdd_data.empty:
+                        occ_tdd = occ
+                    else:
+                        occ_fdd = occ
                     date_max = ref.loc[ref['MaxSpeed'].idxmax(), 'DateTime'].strftime('%Y-%m-%d %H:%M:%S')
                     total_measures = len(ref)
 
             if max_final <= 0:
                 continue
 
+            taux = calculer_taux_utilisation_complet(
+                max_trafic=max_final, max_tdd=max_tdd, max_fdd=max_fdd,
+                capacite_tdd=capacite_tdd_mbps, capacite_fdd=capacite_fdd_mbps,
+                classification=classification, capacite_globale=capacite_mbps
+            )
+
             resultats[prefix] = {
-                'Site': prefix,
-                'Site_TDD': site_tdd,
-                'Site_FDD': site_fdd or site_simple,
-                'Classification': classification,
-                'Type_Trans': type_trans,
-                'Max_Trafic_Final': round(max_final, 4),
-                'Max_Trafic_FDD': round(max_fdd, 4),
-                'Max_Trafic_TDD': round(max_tdd, 4),
+                'Site': prefix, 'Site_TDD': site_tdd, 'Site_FDD': site_fdd or site_simple,
+                'Classification': classification, 'Type_Trans': type_trans,
+                'Max_Trafic_Final': round(max_final, 4), 'Max_Trafic_FDD': round(max_fdd, 4), 'Max_Trafic_TDD': round(max_tdd, 4),
                 'Somme_FDD_TDD': round(somme_fdd_tdd, 4) if somme_fdd_tdd else None,
-                'Seuil_Critique': round(seuil, 4),
-                'Nombre_Occurrences': int(occ),
-                'Total_Measures': total_measures,
-                'Date_Max': date_max,
-                'Capacite_Mbps': round(capacite_mbps, 2),
-                'Latitude': lat,
-                'Longitude': lng,
+                'Seuil_Critique': round(seuil, 4), 'Nombre_Occurrences': int(occ),
+                'Nombre_Occurrences_TDD': int(occ_tdd), 'Nombre_Occurrences_FDD': int(occ_fdd),
+                'Total_Measures': total_measures, 'Date_Max': date_max,
+                'Capacite_Mbps': float(capacite_mbps), 'Capacite_TDD_Mbps': float(capacite_tdd_mbps), 'Capacite_FDD_Mbps': float(capacite_fdd_mbps),
+                'taux_utilisation': taux['taux_utilisation'], 'taux_utilisation_tdd': taux['taux_utilisation_tdd'], 'taux_utilisation_fdd': taux['taux_utilisation_fdd'],
+                'DropCong_TDD': int(dropcong_tdd), 'DropCong_FDD': int(dropcong_fdd), 'DropCong_TF': int(dropcong_tf),
+                'Latitude': lat, 'Longitude': lng, 'Duree_Jours': int(duree_jours),
+                'etat_site': 'NON_EVALUE', 'site_status': 'NON_EVALUE', 'is_critical': False,
             }
 
         tous_les_sites = list(resultats.values())
@@ -892,40 +1371,23 @@ def traiter_fichiers(file_trafic_content, file_port_content=None,
             'date_analyse': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         }
 
-        print(f"\n📊 STATISTIQUES FINALES:")
-        print(f"   ✅ '-' (sans suffixe) : {stats['sites_inconnus']}")
-        print(f"   ✅ TF                 : {stats['sites_tf']}")
-        print(f"   ✅ COTRANS            : {stats['sites_cotrans']}")
-        print(f"   ✅ NO_COTRANS         : {stats['sites_nocotrans']}")
-        print(f"   ✅ ONLY_FDD           : {stats['sites_only_fdd']}")
-        print(f"   📊 TOTAL              : {stats['total_sites']}")
-        print(f"   📡 Avec capacité      : {sum(1 for s in tous_les_sites if s['Capacite_Mbps'] > 0)}")
-        print(f"   📍 Avec GPS           : {sum(1 for s in tous_les_sites if s['Latitude'] is not None)}")
-
-        # Insertions finales
         print("\n💾 Insertion dans analyse_resultat...")
         inserer_analyse_resultat(tous_les_sites)
-        print("\n💾 Insertion dans trafic_historique brut...")
+
+        print("\n💾 Insertion dans trafic_historique (courbes + IA)...")
         inserer_trafic_historique_brut(df_trafic)
-        print("\n💾 Insertion dans trafic_historique journalier...")
-        inserer_trafic_historique(tous_les_sites)
+
         print("\n🔍 ANALYSE DES ÉTATS ET ALERTES...")
         alertes = analyser_etats_et_alertes(tous_les_sites)
-        if alertes > 0:
-            print(f"   📋 {alertes} alertes générées dans site_alert")
-        else:
-            print("   📋 Aucune nouvelle alerte")
+
         print(f"\n✅ Terminé en {time.time()-start_total:.1f}s")
 
         return {
             "status": "success",
             "message": "Traitement terminé avec succès",
-            "data": {
-                "tous_les_sites": tous_les_sites,
-                "stats": stats,
-                "alertes": alertes
-            }
+            "data": {"tous_les_sites": tous_les_sites, "stats": stats, "alertes": alertes}
         }
+
     except Exception as e:
         print(f"❌ ERREUR : {e}")
         traceback.print_exc()

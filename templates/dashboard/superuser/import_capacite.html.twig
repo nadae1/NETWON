@@ -1,0 +1,19 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+{% block dashboard_content %}
+<h2>Importer des capacités (FO/FH/Backbone)</h2>
+<form method="post" enctype="multipart/form-data">
+    <div>
+        <label>Type de fichier :</label>
+        <select name="type" required>
+            <option value="fo">FO</option>
+            <option value="fh">FH</option>
+            <option value="backbone">Backbone</option>
+        </select>
+    </div>
+    <div>
+        <label>Fichier Excel/CSV :</label>
+        <input type="file" name="capacite_file" accept=".xlsx,.xls,.csv" required>
+    </div>
+    <button type="submit">Importer</button>
+</form>
+{% endblock %}

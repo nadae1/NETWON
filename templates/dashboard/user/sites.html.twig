@@ -4,15 +4,12 @@
 <div class="workflow-page">
     <div class="page-header">
         <div>
-            <h2 class="page-title">{{ pageTitle|default('Sites') }}</h2>
-            <div class="page-desc">Sites filtrés par votre service</div>
         </div>
         <div>
             <a href="{{ path('dashboard_import') }}" class="btn-primary">+ Nouvel Import</a>
         </div>
     </div>
 
-    <!-- Filters -->
     <div class="card" style="margin-bottom: 20px;">
         <form method="get" class="filters-form">
             <div class="filter-group">
@@ -21,6 +18,15 @@
                     <option value="">Toutes</option>
                     {% for class in classifications %}
                         <option value="{{ class }}" {% if currentClassification == class %}selected{% endif %}>{{ class }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>État / Statut</label>
+                <select name="status">
+                    <option value="">Tous</option>
+                    {% for value, label in statusOptions %}
+                        <option value="{{ value }}" {% if currentStatus == value %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -40,48 +46,78 @@
             <table class="workflow-table">
                 <thead>
                     <tr>
-                        <th>Site</th>
-                        <th>Site pairé</th>
+                        <th>Site_name</th>
                         <th>Classification</th>
-                        <th>Type Trans</th>
-                        <th>Max Trafic</th>
-                        <th>Date Max</th>
+                        <th>Type</th>
+                        <th>Max TDD</th>
+                        <th>Max FDD</th>
+                        <th>Trafic Max</th>
+                        <th>Capacité TDD (Mbps)</th>
+                        <th>Capacité FDD (Mbps)</th>
+                        <th>Taux Utilisation</th>
+                        <th>Taux Utilisation TDD</th>
+                        <th>Taux Utilisation FDD</th>
                         <th>Occurrences</th>
+                        <th>Occurrence TDD</th>
+                        <th>Occurrence FDD</th>
+                        <th>Statut</th>
                         <th>État</th>
+                        <th>DropCong (tdd)</th>
+                        <th>DropCong (fdd)</th>
+                        <th>DropCong (tf)</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for site in sites %}
                         <tr>
                             <td><strong>{{ site.siteName }}</strong></td>
-                            <td>{{ site.pairedSiteName ?: '-' }}</td>
                             <td>{{ site.classification ?: '-' }}</td>
                             <td>{{ site.typeTrans ?: '-' }}</td>
-                            <td>{{ site.maxTrafic|number_format(2, '.', ' ') }}</td>
-                            <td>{{ site.dateMax ? site.dateMax|date('d/m/Y H:i') : '-' }}</td>
+                            <td>{{ site.maxTraficTdd is not null ? site.maxTraficTdd|number_format(2, '.', ' ') : '-' }}</td>
+                            <td>{{ site.maxTraficFdd is not null ? site.maxTraficFdd|number_format(2, '.', ' ') : '-' }}</td>
+                            <td>{{ site.maxTrafic is not null ? site.maxTrafic|number_format(2, '.', ' ') : '-' }}</td>
+                            <td>{{ site.capaciteTddMbps is not null ? site.capaciteTddMbps|number_format(2, '.', ' ') : '-' }}</td>
+                            <td>{{ site.capaciteFddMbps is not null ? site.capaciteFddMbps|number_format(2, '.', ' ') : '-' }}</td>
+                            <td>{{ site.tauxUtilisation is not null ? site.tauxUtilisation|number_format(2, '.', ' ') ~ '%' : '-' }}</td>
+                            <td>{{ site.tauxUtilisationTdd is not null ? site.tauxUtilisationTdd|number_format(2, '.', ' ') ~ '%' : '-' }}</td>
+                            <td>{{ site.tauxUtilisationFdd is not null ? site.tauxUtilisationFdd|number_format(2, '.', ' ') ~ '%' : '-' }}</td>
                             <td>{{ site.nombreOccurrences }}</td>
+                            <td>{{ site.nombreOccurrencesTdd is not null ? site.nombreOccurrencesTdd : '-' }}</td>
+                            <td>{{ site.nombreOccurrencesFdd is not null ? site.nombreOccurrencesFdd : '-' }}</td>
+                            <td>{{ site.status ?: '-' }}</td>
                             <td>
-                                {% if site.isCritical %}
+                                {# ✅ CORRIGÉ : comparaison alignée sur les vraies valeurs
+                                   produites par le pipeline Python. #}
+                                {% set st = site.siteStatus %}
+                                {% if st == 'CRITIQUE' %}
                                     <span class="badge red">Critique</span>
+                                {% elseif st == 'SURVEILLANCE' %}
+                                    <span class="badge orange">Sous observation</span>
+                                {% elseif st == 'SECURISE' %}
+                                    <span class="badge green">Sécurisé</span>
+                                {% elseif st == 'ERREUR_EVALUATION' %}
+                                    <span class="badge gray">Erreur d'évaluation</span>
                                 {% else %}
-                                    <span class="badge green">Normal</span>
+                                    <span class="badge gray">Non évalué</span>
                                 {% endif %}
                             </td>
+                            <td>{{ site.dropCongTdd is not null ? site.dropCongTdd : '-' }}</td>
+                            <td>{{ site.dropCongFdd is not null ? site.dropCongFdd : '-' }}</td>
+                            <td>{{ site.dropCongTf is not null ? site.dropCongTf : '-' }}</td>
                         </tr>
                     {% else %}
                         <tr>
-                            <td colspan="8" class="empty-state">Aucun site trouvé</td>
+                            <td colspan="19" class="empty-state">Aucun site trouvé</td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
 
-        <!-- Pagination -->
         {% if pagination.totalPages > 1 %}
             <div class="pagination">
                 {% for p in 1..pagination.totalPages %}
-                    <a href="{{ path('user_dashboard_sites', {page: p, classification: currentClassification, search: currentSearch}) }}" 
+                    <a href="{{ path('user_dashboard_sites', {page: p, classification: currentClassification, status: currentStatus, search: currentSearch}) }}"
                        class="page-link {% if p == pagination.page %}active{% endif %}">{{ p }}</a>
                 {% endfor %}
             </div>
@@ -142,5 +178,15 @@
     color: white;
     border-color: #3b82f6;
 }
+.badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.badge.red { background: #fee2e2; color: #dc2626; }
+.badge.orange { background: #ffedd5; color: #ea580c; }
+.badge.green { background: #dcfce7; color: #16a34a; }
+.badge.gray { background: #f1f5f9; color: #64748b; }
 </style>
 {% endblock %}

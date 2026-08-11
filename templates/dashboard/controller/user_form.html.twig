@@ -1,0 +1,132 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="dashboard-home dashboard-home--controller">
+    <div class="dashboard-home-toolbar">
+        <div>
+            <h1 class="page-title">{{ title }}</h1>
+            <div class="page-subtitle">Le rôle reste fixé à ROLE_USER</div>
+        </div>
+
+        <div class="dashboard-home-actions">
+            <a href="{{ path('controller_users') }}" class="btn-secondary">← Retour à la liste</a>
+        </div>
+    </div>
+
+    <div class="card">
+        {{ form_start(form) }}
+
+        <div class="form-grid">
+            <div>
+                {{ form_label(form.username) }}
+                {{ form_widget(form.username, {attr: {class: 'form-control'}}) }}
+                {{ form_errors(form.username) }}
+            </div>
+
+            <div>
+                {{ form_label(form.email) }}
+                {{ form_widget(form.email, {attr: {class: 'form-control'}}) }}
+                {{ form_errors(form.email) }}
+            </div>
+
+            <div>
+                {{ form_label(form.serviceChoice) }}
+                {{ form_widget(form.serviceChoice, {attr: {class: 'form-control'}}) }}
+                {{ form_errors(form.serviceChoice) }}
+                <small class="muted">Pour les départements partagés (Déploiement, Support Radio, Support Backhaul), choisissez "Déploiement".</small>
+            </div>
+
+            <div>
+                {{ form_label(form.departmentChoice) }}
+                {{ form_widget(form.departmentChoice, {attr: {class: 'form-control'}}) }}
+                {{ form_errors(form.departmentChoice) }}
+            </div>
+
+            <div class="full-width">
+                {{ form_label(form.roles) }}
+                <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:6px;">
+                    {{ form_widget(form.roles) }}
+                </div>
+                {{ form_errors(form.roles) }}
+            </div>
+
+            <div>
+                {{ form_label(form.plainPassword) }}
+                {{ form_widget(form.plainPassword, {attr: {class: 'form-control'}}) }}
+                <small class="muted">Laissez vide uniquement lors d’une modification.</small>
+                {{ form_errors(form.plainPassword) }}
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn-primary">{{ submitLabel }}</button>
+            <a href="{{ path('controller_users') }}" class="btn-secondary">Annuler</a>
+        </div>
+
+        {{ form_end(form) }}
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const serviceSelect = document.querySelector('#{{ form.serviceChoice.vars.id }}');
+    const departmentSelect = document.querySelector('#{{ form.departmentChoice.vars.id }}');
+
+    if (serviceSelect && departmentSelect) {
+        // Objet des départements par service (identique à celui du formulaire)
+        const departments = {
+            'FO': {
+                'Ingénierie IP': 'ingenierie_ip',
+                'Support Trans': 'support_trans'
+            },
+            'FH': {
+                'Ingénierie Capillaire': 'ingenierie_capillaire',
+                'Support FH': 'support_fh'
+            },
+            'DEPLOIEMENT': {
+                'Déploiement Télécom': 'deploiement_telecom',
+                'Support Radio': 'support_radio',
+                'Support Backhaul': 'support_backhaul'
+            },
+            'SHARED': {
+                'Opérateur hébergeur': 'operator'
+            }
+        };
+
+        function updateDepartments() {
+            const selectedService = serviceSelect.value;
+            const currentValue = departmentSelect.value;
+
+            // Vider le select
+            departmentSelect.innerHTML = '';
+
+            // Ajouter l'option placeholder
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Sélectionner un département';
+            departmentSelect.appendChild(placeholder);
+
+            // Ajouter les départements du service sélectionné
+            if (selectedService && departments[selectedService]) {
+                for (const [label, value] of Object.entries(departments[selectedService])) {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = label;
+                    if (value === currentValue) {
+                        option.selected = true;
+                    }
+                    departmentSelect.appendChild(option);
+                }
+            }
+        }
+
+        serviceSelect.addEventListener('change', updateDepartments);
+
+        // Initialisation au chargement
+        if (serviceSelect.value) {
+            updateDepartments();
+        }
+    }
+});
+</script>
+{% endblock %}

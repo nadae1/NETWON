@@ -29,6 +29,26 @@ class TicketHistory
 
     #[ORM\Column(type: 'datetime')]
     private \DateTimeInterface $createdAt;
+    #[ORM\Column(length: 255, nullable: true)]
+private ?string $site = null;
+
+public function getSite(): ?string { return $this->site; }
+public function setSite(?string $site): self { $this->site = $site; return $this; }
+// src/Entity/TicketHistory.php
+
+#[ORM\Column(type: 'datetime', nullable: false)]
+private ?\DateTimeInterface $dateJour = null;
+
+public function getDateJour(): ?\DateTimeInterface
+{
+    return $this->dateJour;
+}
+
+public function setDateJour(\DateTimeInterface $dateJour): self
+{
+    $this->dateJour = $dateJour;
+    return $this;
+}
 
     public function __construct()
     {

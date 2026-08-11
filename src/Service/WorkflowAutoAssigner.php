@@ -1,120 +1,131 @@
 <?php
+// src/Service/WorkflowAutoAssigner.php
 
 namespace App\Service;
 
 use App\Entity\ProcessedSite;
 use App\Entity\Ticket;
+use App\Entity\TicketTask;
 use App\Entity\User;
+use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 
 class WorkflowAutoAssigner
 {
     private EntityManagerInterface $em;
-    private WorkflowEngineService $workflowEngine;
+    private UserRepository $userRepo;
     private LoggerInterface $logger;
+    private NotificationService $notificationService;
 
     public function __construct(
         EntityManagerInterface $em,
-        WorkflowEngineService $workflowEngine,
-        LoggerInterface $logger
+        UserRepository $userRepo,
+        LoggerInterface $logger,
+        NotificationService $notificationService
     ) {
         $this->em = $em;
-        $this->workflowEngine = $workflowEngine;
+        $this->userRepo = $userRepo;
         $this->logger = $logger;
+        $this->notificationService = $notificationService;
     }
 
-    /**
-     * @param ProcessedSite[] $sites
-     * @return User[]
-     * @throws \Exception
-     */
-    public function assignUsersForSites(array $sites, Ticket $ticket, User $createdBy): array
+    public function assignUsersForSites(array $sites, Ticket $ticket, User $currentUser): array
     {
-        $requiredDepartments = [];
-
-        foreach ($sites as $site) {
-            $depts = $this->getRequiredDepartmentsForSite($site);
-            foreach ($depts as $dept) {
-                if (!in_array($dept, $requiredDepartments, true)) {
-                    $requiredDepartments[] = $dept;
-                }
-            }
-        }
-
-        // Récupérer tous les utilisateurs normaux (ROLE_USER, non admin/superuser)
-        $allUsers = $this->em->getRepository(User::class)->findAll();
-        $normalUsers = array_filter($allUsers, function (User $user) {
-            $roles = $user->getRoles();
-            return in_array('ROLE_USER', $roles) 
-                && !in_array('ROLE_ADMIN', $roles) 
-                && !in_array('ROLE_SUPERUSER', $roles);
-        });
-
-        // Grouper par department
-        $usersByDepartment = [];
-        foreach ($normalUsers as $user) {
-            $dept = $user->getDepartment();
-            if ($dept) {
-                if (!isset($usersByDepartment[$dept])) {
-                    $usersByDepartment[$dept] = [];
-                }
-                $usersByDepartment[$dept][] = $user;
-            }
-        }
-
         $assignedUsers = [];
-        foreach ($requiredDepartments as $dept) {
-            if (!empty($usersByDepartment[$dept])) {
-                $user = $usersByDepartment[$dept][0];
-                $this->workflowEngine->createInitialIpTask($ticket, $user);
-                $assignedUsers[] = $user;
-                $this->logger->info("Assigné département '$dept' à l'utilisateur {$user->getUsername()}");
-            } else {
-                $this->logger->warning("Département requis '$dept' non trouvé parmi les utilisateurs.");
+
+        $sitesByService = [];
+        foreach ($sites as $site) {
+            $service = $site->getService();
+            if (empty($service)) {
+                $service = 'SHARED';
             }
+            $service = strtoupper($service);
+            $sitesByService[$service][] = $site;
         }
 
-        if (empty($assignedUsers)) {
-            throw new \Exception(
-                "Aucun utilisateur trouvé pour les départements requis : " . implode(', ', $requiredDepartments) .
-                ". Veuillez créer des utilisateurs avec ces departments et le rôle ROLE_USER."
+        foreach ($sitesByService as $service => $serviceSites) {
+            $user = $this->findUserForService($service);
+
+            if (!$user) {
+                $this->logger->warning('Aucun utilisateur pour le service {service}.', ['service' => $service]);
+                $user = $this->findUserForService('SHARED');
+                if (!$user) {
+                    $user = $currentUser;
+                    $this->logger->warning('Assignation à {user} (fallback).', ['user' => $user->getUserIdentifier()]);
+                }
+            }
+
+            // ✅ CORRIGÉ (bug principal) : le departmentName de la tâche
+            // était auparavant déduit UNIQUEMENT du service du site via
+            // une table de correspondance figée qui ne couvrait ni
+            // 'support_backhaul' ni 'support_radio'. Résultat : si
+            // l'utilisateur assigné avait justement pour vrai
+            // département 'support_backhaul' (ou 'support_radio'), sa
+            // tâche recevait quand même un departmentName totalement
+            // différent (ex: 'operator') -- la rendant invisible dans
+            // son propre tableau de bord (UserSupportBackhaulController /
+            // UserSupportRadioController filtrent strictement sur
+            // departmentName), alors que DeadlineAlertService le listait
+            // bien comme "responsable" du ticket (lui, ne filtrant pas
+            // par département).
+            //
+            // On utilise maintenant en priorité le VRAI département de
+            // l'utilisateur assigné ($user->getDepartment()), qui est la
+            // source de vérité utilisée par tous les tableaux de bord
+            // spécialisés (Backhaul, Radio, Déploiement, FO...). La table
+            // de correspondance par service ne sert plus que de repli si
+            // l'utilisateur n'a aucun département renseigné en base.
+            $defaultDepartmentByService = match ($service) {
+                'FO' => 'ingenierie_ip',
+                'FH' => 'support_fh',
+                'DEPLOIEMENT' => 'deploiement_telecom',
+                default => 'operator',
+            };
+            $resolvedDepartment = $user->getDepartment() ?: $defaultDepartmentByService;
+
+            $task = new TicketTask();
+            $task->setTicket($ticket);
+            $task->setAssignedTo($user);
+            $task->setTitle('Étude initiale ' . $service);
+            $task->setDescription('Analyser la demande et décider OK / NOK.');
+            $task->setServiceName($service);
+            $task->setDepartmentName($resolvedDepartment);
+            $task->setStatus(TicketTask::STATUS_PENDING);
+            $task->setStepCode('initial_analysis');
+            $task->setStepOrder(1);
+            $task->setSiteData(array_map(fn($s) => $s->getId(), $serviceSites));
+
+            $this->em->persist($task);
+
+            $this->notificationService->notify(
+                $user,
+                NotificationService::TYPE_WORKFLOW_ASSIGNED,
+                sprintf(
+                    'Nouvelle tâche : %s pour le ticket #%d - %s',
+                    $task->getTitle(),
+                    $ticket->getId() ?? 0,
+                    $ticket->getTitle()
+                ),
+                $ticket
             );
+
+            $assignedUsers[] = $user;
         }
+
+        $this->em->flush();
 
         return $assignedUsers;
     }
 
-    /**
-     * Retourne la liste des départements requis pour un site donné.
-     */
-    private function getRequiredDepartmentsForSite(ProcessedSite $site): array
+    private function findUserForService(string $service): ?User
     {
-        $typeTrans = strtoupper($site->getTypeTrans() ?? '');
-        $action = $site->getRecommendedAction() ?? 'UPGRADE';
-
-        // Workflow FO
-        if (str_contains($typeTrans, 'FO')) {
-            $base = ['ingenierie_ip'];
-            if ($site->isCritical() || str_contains($action, 'FO_UPGRADE')) {
-                $base[] = 'ingenierie_cap';
+        $users = $this->userRepo->findBy(['service' => $service]);
+        foreach ($users as $user) {
+            if (in_array('ROLE_USER', $user->getRoles(), true)) {
+                return $user;
             }
-            $base[] = 'deploiement';
-            $base[] = 'support_radio';
-            $base[] = 'support_backhaul';
-            return array_unique($base);
         }
-
-        // Workflow FH
-        if (str_contains($typeTrans, 'FH')) {
-            return ['ingenierie_fh', 'ingenierie_ip', 'support_radio', 'deploiement_telecom'];
-        }
-
-        // Shared / Backbone
-        if (str_contains($typeTrans, 'SHARED') || str_contains($typeTrans, 'BACKBONE')) {
-            return ['deploiement_shared', 'operateur'];
-        }
-
-        return ['ingenierie_ip'];
+        return null;
     }
 }

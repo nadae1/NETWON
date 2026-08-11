@@ -1,59 +1,356 @@
 {% extends 'dashboard/base_dashboard.html.twig' %}
 
 {% block dashboard_content %}
-<div class="page-header">
+<style>
+    .notif-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    .notif-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin: 0;
+    }
+    .notif-title small {
+        font-size: 0.85rem;
+        font-weight: 400;
+        color: #64748b;
+        margin-left: 0.5rem;
+    }
+
+    .notif-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    .stat-card {
+        background: #fff;
+        border: 1px solid #e9edf4;
+        border-radius: 0.75rem;
+        padding: 0.8rem 1.2rem;
+        min-width: 120px;
+        flex: 1;
+    }
+    .stat-card .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #0f172a;
+    }
+    .stat-card .stat-label {
+        font-size: 0.75rem;
+        color: #64748b;
+        text-transform: uppercase;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+    }
+    .stat-card .stat-badge {
+        display: inline-block;
+        padding: 0.15rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        background: #dbeafe;
+        color: #1e40af;
+    }
+    .stat-card .stat-badge.unread {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .notif-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.8rem;
+        margin-bottom: 1.5rem;
+        align-items: center;
+    }
+    .notif-toolbar .filter-select {
+        padding: 0.4rem 1rem;
+        border: 1px solid #d1d5db;
+        border-radius: 40px;
+        font-size: 0.85rem;
+        background: #fff;
+        min-width: 160px;
+    }
+    .btn-primary-sm {
+        background: #3b82f6;
+        color: #fff;
+        border: none;
+        padding: 0.4rem 1.2rem;
+        border-radius: 40px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+        text-decoration: none;
+        display: inline-block;
+    }
+    .btn-primary-sm:hover {
+        background: #2563eb;
+        color: #fff;
+    }
+    .btn-secondary-sm {
+        background: #e2e8f0;
+        color: #334155;
+        border: none;
+        padding: 0.4rem 1.2rem;
+        border-radius: 40px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+        text-decoration: none;
+        display: inline-block;
+    }
+    .btn-secondary-sm:hover {
+        background: #cbd5e1;
+        color: #0f172a;
+    }
+
+    .notif-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+    .notif-table thead {
+        background: #f8fafc;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .notif-table th {
+        text-align: left;
+        padding: 0.8rem 1rem;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        font-weight: 600;
+        color: #64748b;
+        letter-spacing: 0.3px;
+    }
+    .notif-table td {
+        padding: 0.8rem 1rem;
+        border-bottom: 1px solid #f1f5f9;
+        vertical-align: middle;
+    }
+    .notif-table tr:hover {
+        background: #fafcff;
+    }
+    .notif-table .unread-row {
+        background: #f8faff;
+        border-left: 3px solid #3b82f6;
+    }
+
+    .badge-status {
+        display: inline-block;
+        padding: 0.15rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: capitalize;
+    }
+    .badge-read {
+        background: #d1fae5;
+        color: #065f46;
+    }
+    .badge-unread {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .empty-state {
+        padding: 2rem;
+        text-align: center;
+        color: #94a3b8;
+        border: 1px dashed #cbd5e1;
+        border-radius: 0.75rem;
+    }
+
+    .notif-actions form {
+        display: inline-block;
+        margin: 0;
+    }
+    .btn-sm {
+        padding: 0.2rem 0.7rem;
+        font-size: 0.7rem;
+        border-radius: 40px;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .btn-sm-primary {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+    .btn-sm-primary:hover {
+        background: #bfdbfe;
+    }
+    .btn-sm-secondary {
+        background: #f1f5f9;
+        color: #475569;
+    }
+    .btn-sm-secondary:hover {
+        background: #e2e8f0;
+    }
+
+    .notif-link {
+        color: #3b82f6;
+        text-decoration: none;
+        font-weight: 500;
+    }
+    .notif-link:hover {
+        text-decoration: underline;
+    }
+
+    .type-badge {
+        display: inline-block;
+        padding: 0.15rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.6rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        background: #f1f5f9;
+        color: #475569;
+    }
+    .type-badge.workflow { background: #dbeafe; color: #1e40af; }
+    .type-badge.task { background: #fef3c7; color: #92400e; }
+    .type-badge.supervision { background: #f3e8ff; color: #6b21a5; }
+    .type-badge.validation { background: #d1fae5; color: #065f46; }
+
+    @media (max-width: 768px) {
+        .notif-table {
+            font-size: 0.8rem;
+        }
+        .notif-table th,
+        .notif-table td {
+            padding: 0.5rem 0.6rem;
+        }
+        .stat-card {
+            min-width: 80px;
+            padding: 0.5rem 0.8rem;
+        }
+        .stat-card .stat-value {
+            font-size: 1.2rem;
+        }
+    }
+</style>
+
+<div class="notif-header">
+    <h2 class="notif-title">
+        Notifications
+        <small>{{ stats.total|default(0) }} au total</small>
+    </h2>
     <div>
-        <h2 class="page-title">Notifications</h2>
-        <div class="page-desc">Vos alertes et rappels.</div>
+        <form method="post" action="{{ path('dashboard_notifications_mark_all_read') }}" style="display:inline-block;">
+            <button type="submit" class="btn-secondary-sm">✅ Tout marquer comme lu</button>
+        </form>
     </div>
 </div>
 
-<div class="card">
-    <h3 class="panel-title">Dernières notifications</h3>
+{# ===== STATISTIQUES ===== #}
+<div class="notif-stats">
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total|default(0) }}</div>
+        <div class="stat-label">Total</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.unread|default(0) }}</div>
+        <div class="stat-label">
+            Non lues
+            {% if stats.unread|default(0) > 0 %}
+                <span class="stat-badge unread">{{ stats.unread }}</span>
+            {% endif %}
+        </div>
+    </div>
+    {% for type, count in stats.types|default([]) %}
+        <div class="stat-card">
+            <div class="stat-value">{{ count }}</div>
+            <div class="stat-label">{{ type|replace({'_': ' '})|title }}</div>
+        </div>
+    {% endfor %}
+</div>
 
+{# ===== FILTRE ===== #}
+<div class="notif-toolbar">
+    <form method="get" style="display:flex; gap:0.8rem; flex-wrap:wrap; align-items:center;">
+        <select name="type" class="filter-select" onchange="this.form.submit()">
+            <option value="">Tous les types</option>
+            {% for type, count in stats.types|default([]) %}
+                <option value="{{ type }}" {% if currentType == type %}selected{% endif %}>
+                    {{ type|replace({'_': ' '})|title }} ({{ count }})
+                </option>
+            {% endfor %}
+        </select>
+        {% if currentType %}
+            <a href="{{ path('dashboard_notifications') }}" class="btn-secondary-sm">Réinitialiser</a>
+        {% endif %}
+    </form>
+</div>
+
+{# ===== TABLEAU ===== #}
+<div class="card" style="padding:0; overflow:hidden;">
     {% if notifications is empty %}
         <div class="empty-state">Aucune notification.</div>
     {% else %}
-        <div class="table-like">
-            <div class="table-row table-head">
-                <div>Date</div>
-                <div>Type</div>
-                <div>Message</div>
-                <div>Statut</div>
-                <div>Action</div>
-            </div>
-            {% for n in notifications %}
-                <div class="table-row">
-                    <div>{{ n.createdAt|date('d/m/Y H:i') }}</div>
-                    <div>{{ n.type }}</div>
-                    <div>
-                        {{ n.message }}
-                        {% if n.ticket %}
-                            <div class="muted" style="margin-top:4px;">
-                                <a href="{{ path('dashboard_workflow_show', {id: n.ticket.id}) }}">Voir ticket #{{ n.ticket.id }}</a>
-                            </div>
-                        {% endif %}
-                    </div>
-                    <div>
-                        {% if n.isRead %}
-                            <span class="badge green">Lu</span>
-                        {% else %}
-                            <span class="badge red">Non lu</span>
-                        {% endif %}
-                    </div>
-                    <div>
-                        {% if not n.isRead %}
-                            <form method="post" action="{{ path('dashboard_notification_read', {id: n.id}) }}">
-                                <button class="btn btn-sm">Marquer comme lu</button>
-                            </form>
-                        {% else %}
-                            -
-                        {% endif %}
-                    </div>
-                </div>
-            {% endfor %}
+        <div style="overflow-x:auto;">
+            <table class="notif-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Message</th>
+                        <th>Statut</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for n in notifications %}
+                        <tr class="{% if not n.isRead %}unread-row{% endif %}">
+                            <td style="white-space:nowrap;">{{ n.createdAt|date('d/m/Y H:i') }}</td>
+                            <td>
+                                <span class="type-badge 
+                                    {% if n.type starts with 'workflow' %}workflow
+                                    {% elseif n.type starts with 'task' %}task
+                                    {% elseif n.type starts with 'supervision' %}supervision
+                                    {% elseif n.type starts with 'validation' %}validation
+                                    {% endif %}
+                                ">
+                                    {{ n.type|replace({'_': ' '})|title }}
+                                </span>
+                            </td>
+                            <td>
+                                {{ n.message }}
+                                {% if n.ticket %}
+                                    <div style="margin-top:4px;">
+                                        <a href="{{ path('dashboard_workflow_show', {id: n.ticket.id}) }}" class="notif-link">
+                                            Voir ticket #{{ n.ticket.id }}
+                                        </a>
+                                    </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge-status {% if n.isRead %}badge-read{% else %}badge-unread{% endif %}">
+                                    {% if n.isRead %}Lu{% else %}Non lu{% endif %}
+                                </span>
+                            </td>
+                            <td class="notif-actions">
+                                {% if not n.isRead %}
+                                    <form method="post" action="{{ path('dashboard_notification_read', {id: n.id}) }}">
+                                        <button class="btn-sm btn-sm-primary">✓ Marquer lu</button>
+                                    </form>
+                                {% else %}
+                                    <span style="color:#94a3b8; font-size:0.7rem;">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     {% endif %}
 </div>
 {% endblock %}
-

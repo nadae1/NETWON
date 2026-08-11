@@ -98,20 +98,20 @@ class CreateUserCommand extends Command
             $departmentChoices = match ($service) {
                 'FO' => [
                     'ingenierie_ip' => 'ingenierie_ip',
-                    'deploiement' => 'deploiement',
+                    'support_trans' => 'support_trans',
+                    'deploiement_telecom' => 'deploiement_telecom',
                     'support_radio' => 'support_radio',
                     'support_backhaul' => 'support_backhaul',
-                    'ingenierie_cap' => 'ingenierie_cap',
                 ],
                 'FH' => [
-                    'ingenierie_fh' => 'ingenierie_fh',
-                    'ingenierie_ip' => 'ingenierie_ip',
-                    'support_radio' => 'support_radio',
+                    'ingenierie_capillaire' => 'ingenierie_capillaire',
+                    'support_fh' => 'support_fh',
                     'deploiement_telecom' => 'deploiement_telecom',
+                    'support_radio' => 'support_radio',
+                    'support_backhaul' => 'support_backhaul',
                 ],
                 'SHARED' => [
-                    'deploiement_shared' => 'deploiement_shared',
-                    'operateur' => 'operateur',
+                    'operator' => 'operator',
                 ],
                 default => [],
             };

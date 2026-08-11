@@ -46,44 +46,45 @@ class DashboardController extends AbstractController
         ]);
     }
 
-    #[Route('/dashboard/sites', name: 'legacy_user_dashboard_sites')]
-    public function userSites(
-        Request $request,
-        ProcessedSiteRepository $processedSiteRepository
-    ): Response {
-        $this->denyAccessUnlessGranted('ROLE_USER');
+#[Route('/dashboard/sites', name: 'legacy_user_dashboard_sites')]
+public function userSites(Request $request, ProcessedSiteRepository $processedSiteRepository): Response
+{
+    $this->denyAccessUnlessGranted('ROLE_USER');
 
-        /** @var \App\Entity\User $user */
-        $user = $this->getUser();
-        $userService = $user->getService();
+    /** @var \App\Entity\User $user */
+    $user = $this->getUser();
+    $userService = $user->getService();
 
-        $page = (int) $request->query->get('page', 1);
-        $classification = $request->query->get('classification');
-        $search = $request->query->get('search');
+    $page = (int) $request->query->get('page', 1);
+    $classification = $request->query->get('classification');
+    $search = $request->query->get('search');
+    $statusFilter = $request->query->get('status'); // ✅ récupération du filtre
 
-        $pagination = $processedSiteRepository->findSitesPaginated(
-            $userService,
-            $classification,
-            $search,
-            $page,
-            50
-        );
+    $pagination = $processedSiteRepository->findSitesPaginated(
+        $userService,
+        $classification,
+        $search,
+        $page,
+        50,
+        $statusFilter // ✅ transmission du filtre
+    );
 
-        // Get classification options for filter
-        $classificationStats = $processedSiteRepository->getClassificationStats($userService);
-        $classifications = array_keys($classificationStats);
+    $classificationStats = $processedSiteRepository->getClassificationStats($userService);
+    $classifications = array_keys($classificationStats);
 
-        return $this->render('dashboard/user/sites.html.twig', [
-            'sites' => $pagination['items'],
-            'pagination' => $pagination,
-            'currentClassification' => $classification,
-            'currentSearch' => $search,
-            'classifications' => $classifications,
-            'totalSites' => $pagination['total'],
-            'pageTitle' => 'Sites - ' . ($userService ?: 'SHARED'),
-            'serviceName' => $userService ?: 'SHARED',
-        ]);
-    }
+    return $this->render('dashboard/user/sites.html.twig', [
+        'sites' => $pagination['items'],
+        'pagination' => $pagination,
+        'currentClassification' => $classification,
+        'currentSearch' => $search,
+        'currentStatus' => $statusFilter, // ✅ ajout de la variable
+        'classifications' => $classifications,
+        'statusOptions' => ProcessedSiteRepository::getStatusFilterOptions(),
+        'totalSites' => $pagination['total'],
+        'pageTitle' => 'Sites - ' . ($userService ?: 'SHARED'),
+        'serviceName' => $userService ?: 'SHARED',
+    ]);
+}
 
     #[Route('/dashboard/import', name: 'legacy_dashboard_import')]
     public function importForm(): Response

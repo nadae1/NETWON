@@ -1,10 +1,12 @@
 <?php
+// src/Controller/SuperuserWorkflowController.php
 
 namespace App\Controller;
 
 use App\Service\WorkflowAutoAssigner;
 use App\Entity\Ticket;
 use App\Entity\TicketSite;
+use App\Entity\TicketTask; // 🔥 Ajout du use manquant
 use App\Entity\User;
 use App\Form\SuperuserTicketType;
 use App\Repository\ProcessedSiteRepository;
@@ -13,6 +15,8 @@ use App\Service\NotificationService;
 use App\Service\TicketWorkflowService;
 use App\Service\WorkflowEngineService;
 use Doctrine\ORM\EntityManagerInterface;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -26,20 +30,49 @@ class SuperuserWorkflowController extends AbstractController
     {
         $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
         $status = $request->query->get('status');
+        $search = trim((string) $request->query->get('search', ''));
         $allowedStatuses = ['open', 'in_progress', 'completed', 'closed', 'blocked'];
         if ($status && !in_array($status, $allowedStatuses, true)) $status = null;
-        $tickets = $ticketRepository->findByStatusOrdered($status);
+        $tickets = $ticketRepository->findByStatusOrdered($status, $search);
         return $this->render('dashboard/superuser/workflow/index.html.twig', [
             'tickets' => $tickets,
             'currentStatus' => $status,
+            'currentSearch' => $search,
         ]);
     }
 
     #[Route('/ticket/{id}', name: 'superuser_workflow_show', methods: ['GET'])]
-    public function show(Ticket $ticket): Response
+    public function show(Ticket $ticket, ProcessedSiteRepository $processedSiteRepository): Response
     {
         $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
-        return $this->render('dashboard/superuser/workflow/show.html.twig', ['ticket' => $ticket]);
+        $siteDetails = [];
+        foreach ($ticket->getTicketSites() as $ticketSite) {
+            $siteName = $ticketSite->getSiteName();
+            $processedSite = $processedSiteRepository->findOneBy(['siteName' => $siteName]);
+            if ($processedSite) {
+                $siteDetails[$siteName] = $processedSite;
+            }
+        }
+
+        $canValidate = ($ticket->getStatus() === 'waiting_superuser');
+
+        $validationTask = null;
+        foreach ($ticket->getTasks() as $task) {
+            if ($task->getStepCode() === TicketTask::STEP_SUPERUSER_VALIDATION && $task->getStatus() !== 'done') {
+                $validationTask = $task;
+                break;
+            }
+        }
+
+        $blockerInfo = $this->getBlockerInfo($ticket);
+
+        return $this->render('dashboard/superuser/workflow/show.html.twig', [
+            'ticket' => $ticket,
+            'siteDetails' => $siteDetails,
+            'blockerInfo' => $blockerInfo,
+            'canValidate' => $canValidate,
+            'validationTask' => $validationTask,
+        ]);
     }
 
     #[Route('/new', name: 'superuser_workflow_new', methods: ['GET', 'POST'])]
@@ -47,7 +80,6 @@ class SuperuserWorkflowController extends AbstractController
         Request $request,
         EntityManagerInterface $em,
         TicketWorkflowService $ticketWorkflowService,
-        WorkflowEngineService $engine,
         ProcessedSiteRepository $processedSiteRepository,
         NotificationService $notificationService,
         WorkflowAutoAssigner $autoAssigner
@@ -62,55 +94,78 @@ class SuperuserWorkflowController extends AbstractController
         $currentUser = $this->getUser();
         $availableSites = $processedSiteRepository->findLatestSites(null, 5000);
 
-        if ($form->isSubmitted() && $form->isValid()) {
-            $selectedSiteIds = $request->request->all('site_ids');
-            if (empty($selectedSiteIds)) {
-                $this->addFlash('error', 'Veuillez choisir au moins un site.');
-                return $this->redirectToRoute('superuser_workflow_new');
-            }
+        if ($form->isSubmitted()) {
+            if (!$form->isValid()) {
+                foreach ($form->getErrors(true) as $error) {
+                    $this->addFlash('error', $error->getMessage());
+                }
+            } else {
+                $selectedSiteIds = $request->request->all('site_ids');
+                if (empty($selectedSiteIds)) {
+                    $this->addFlash('error', 'Veuillez choisir au moins un site.');
+                    return $this->redirectToRoute('superuser_workflow_new');
+                }
 
-            $ticket->setCreatedBy($currentUser);
-            $ticket->setStatus('open');
-            $ticket->setProgress(0);
-            $ticket->setCreatedAt(new \DateTime());
-            $ticket->setUpdatedAt(new \DateTime());
+                $priority = $form->get('priority')->getData();
 
-            $deadline = $form->get('deadline')->getData();
-            if ($deadline) $ticket->setDeadline($deadline);
+                $ticket->setCreatedBy($currentUser);
+                $ticket->setStatus('open');
+                $ticket->setProgress(0);
+                $ticket->setCreatedAt(new \DateTime());
+                $ticket->setUpdatedAt(new \DateTime());
+                $ticket->setPriority($priority);
 
-            $em->persist($ticket);
+                $deadline = $form->get('deadline')->getData();
+                if ($deadline) $ticket->setDeadline($deadline);
 
-            $selectedSites = [];
-            foreach ($selectedSiteIds as $siteId) {
-                $processedSite = $processedSiteRepository->find((int)$siteId);
-                if (!$processedSite) continue;
-                $ticketSite = new TicketSite();
-                $ticketSite->setTicket($ticket);
-                $ticketSite->setSiteName($processedSite->getSiteName());
-                $ticketSite->setTypeTrans($processedSite->getTypeTrans());
-                $ticketSite->setServiceName($processedSite->getServiceName());
-                $em->persist($ticketSite);
-                $selectedSites[] = $processedSite;
-            }
+                $em->persist($ticket);
 
-            $assignedUsers = $autoAssigner->assignUsersForSites($selectedSites, $ticket, $currentUser);
+                $selectedSites = [];
+                foreach ($selectedSiteIds as $siteId) {
+                    $processedSite = $processedSiteRepository->find((int)$siteId);
+                    if (!$processedSite) continue;
+                    $ticketSite = new TicketSite();
+                    $ticketSite->setTicket($ticket);
+                    $ticketSite->setSiteName($processedSite->getSiteName());
+                    $ticketSite->setTypeTrans($processedSite->getTypeTrans());
+                    $ticketSite->setServiceName($processedSite->getServiceName());
+                    $em->persist($ticketSite);
+                    $selectedSites[] = $processedSite;
+                }
 
-            $ticketWorkflowService->refreshTicketProgress($ticket);
-            $ticketWorkflowService->addHistory(
-                $ticket,
-                $currentUser,
-                'ticket_created',
-                sprintf('Workflow créé avec %d site(s) et %d utilisateur(s) assigné(s).', count($selectedSites), count($assignedUsers))
-            );
+                // Déterminer le nombre d'étapes selon le service du premier site
+                $firstSite = $selectedSites[0] ?? null;
+                if ($firstSite) {
+                    $service = strtoupper($firstSite->getService() ?? '');
+                    if ($service === 'FH') {
+                        $ticket->setTotalSteps(7);
+                    } else {
+                        $ticket->setTotalSteps(5);
+                    }
+                } else {
+                    $ticket->setTotalSteps(7);
+                }
+                $ticket->setCurrentStep(1);
 
-            $em->flush();
-            if (!empty($assignedUsers)) {
-                $notificationService->notifyWorkflowAssignment($ticket, $assignedUsers, count($assignedUsers));
+                $assignedUsers = $autoAssigner->assignUsersForSites($selectedSites, $ticket, $currentUser);
+
+                $ticketWorkflowService->refreshTicketProgress($ticket);
+                $ticketWorkflowService->addHistory(
+                    $ticket,
+                    $currentUser,
+                    'ticket_created',
+                    sprintf('Workflow créé avec %d site(s) et %d utilisateur(s) assigné(s).', count($selectedSites), count($assignedUsers))
+                );
+
                 $em->flush();
-            }
+                if (!empty($assignedUsers)) {
+                    $notificationService->notifyWorkflowAssignment($ticket, $assignedUsers, count($assignedUsers));
+                    $em->flush();
+                }
 
-            $this->addFlash('success', 'Workflow créé avec succès (assignation auto).');
-            return $this->redirectToRoute('superuser_workflow_show', ['id' => $ticket->getId()]);
+                $this->addFlash('success', 'Workflow créé avec succès (assignation auto).');
+                return $this->redirectToRoute('superuser_workflow_show', ['id' => $ticket->getId()]);
+            }
         }
 
         return $this->render('dashboard/superuser/workflow/new.html.twig', [
@@ -122,16 +177,192 @@ class SuperuserWorkflowController extends AbstractController
         ]);
     }
 
+    #[Route('/stats', name: 'superuser_workflow_stats', methods: ['GET'])]
+    public function stats(Request $request, TicketRepository $ticketRepository): Response
+    {
+        $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
+        $month = (int) $request->query->get('month', date('m'));
+        $year = (int) $request->query->get('year', date('Y'));
+        $startDate = (new \DateTime())->setDate($year, $month, 1)->setTime(0, 0, 0);
+        $endDate = (clone $startDate)->modify('last day of this month')->setTime(23, 59, 59);
+
+        $tickets = $ticketRepository->createQueryBuilder('t')
+            ->where('t.createdAt BETWEEN :start AND :end')
+            ->setParameter('start', $startDate)
+            ->setParameter('end', $endDate)
+            ->orderBy('t.createdAt', 'DESC')
+            ->getQuery()
+            ->getResult();
+
+        $totalWorkflows = count($tickets);
+        $closedWorkflows = 0;
+        $overdueWorkflows = 0;
+        $totalSitesProcessed = 0;
+        $workflowDetails = [];
+
+        foreach ($tickets as $ticket) {
+            if (in_array($ticket->getStatus(), ['completed', 'closed'])) {
+                $closedWorkflows++;
+            }
+            if ($ticket->getDeadline() && $ticket->getDeadline() < new \DateTime() && !in_array($ticket->getStatus(), ['completed', 'closed'])) {
+                $overdueWorkflows++;
+            }
+            $sites = $ticket->getTicketSites();
+            $completedSites = 0;
+            foreach ($sites as $site) {
+                if ($site->getStatus() === 'completed') {
+                    $completedSites++;
+                }
+            }
+            $totalSitesProcessed += $completedSites;
+            $users = [];
+            foreach ($ticket->getTasks() as $task) {
+                if ($task->getAssignedTo()) {
+                    $users[] = $task->getAssignedTo()->getUsername();
+                }
+            }
+            $users = array_unique($users);
+            $workflowDetails[] = [
+                'ticket' => $ticket,
+                'sites' => $sites,
+                'siteCount' => $sites->count(),
+                'completedSites' => $completedSites,
+                'users' => implode(', ', $users),
+                'hasPlanData' => $sites->count() > 0,
+            ];
+        }
+
+        $stats = [
+            'total' => $totalWorkflows,
+            'closed' => $closedWorkflows,
+            'overdue' => $overdueWorkflows,
+            'open' => $totalWorkflows - $closedWorkflows,
+            'sitesProcessed' => $totalSitesProcessed,
+        ];
+
+        $availableMonths = [];
+        for ($m = 1; $m <= 12; $m++) {
+            $availableMonths[] = [
+                'month' => $m,
+                'label' => (new \DateTime())->setDate($year, $m, 1)->format('F'),
+            ];
+        }
+
+        return $this->render('dashboard/superuser/workflow/stats.html.twig', [
+            'tickets' => $tickets,
+            'workflowDetails' => $workflowDetails,
+            'stats' => $stats,
+            'currentMonth' => $month,
+            'currentYear' => $year,
+            'availableMonths' => $availableMonths,
+            'startDate' => $startDate->format('d/m/Y'),
+            'endDate' => $endDate->format('d/m/Y'),
+            'monthLabel' => (new \DateTime())->setDate($year, $month, 1)->format('F Y'),
+        ]);
+    }
+
+    #[Route('/export-stats-pdf', name: 'superuser_workflow_stats_export_pdf', methods: ['GET'])]
+    public function exportStatsPdf(Request $request, TicketRepository $ticketRepository): Response
+    {
+        $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
+        $month = (int) $request->query->get('month', date('m'));
+        $year = (int) $request->query->get('year', date('Y'));
+        $start = new \DateTime("$year-$month-01 00:00:00");
+        $end = (clone $start)->modify('last day of this month')->setTime(23, 59, 59);
+
+        $stats = $ticketRepository->getMonthlyStats($start, $end);
+        $workflows = $ticketRepository->findWorkflowsForMonth($start, $end);
+
+        $totalSites = 0;
+        foreach ($workflows as $wf) {
+            $totalSites += $wf->getTicketSites()->count();
+        }
+
+        $html = $this->renderView('dashboard/superuser/workflow/stats_pdf.html.twig', [
+            'stats' => $stats,
+            'workflows' => $workflows,
+            'totalSites' => $totalSites,
+            'month' => $month,
+            'year' => $year,
+            'start' => $start,
+            'end' => $end,
+            'monthLabel' => $start->format('F Y'),
+        ]);
+
+        $options = new Options();
+        $options->set('defaultFont', 'DejaVu Sans');
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html);
+        $dompdf->setPaper('A4', 'landscape');
+        $dompdf->render();
+
+        return new Response($dompdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="rapport_workflows_' . $month . '_' . $year . '.pdf"',
+        ]);
+    }
+
     private function getBlockerInfo(Ticket $ticket): ?array
     {
-        if ($ticket->getStatus() === 'waiting_capillaire') return ['service' => 'Ingénierie Capillaire', 'user' => null];
-        if ($ticket->getStatus() === 'waiting_swap') return ['service' => 'Ingénierie IP (swap)', 'user' => null];
-        if ($ticket->getStatus() === 'waiting_other_service') return ['service' => 'Autre service', 'user' => null];
+        if (in_array($ticket->getStatus(), ['waiting_superuser', 'closed', 'completed'])) {
+            return null;
+        }
+
+        if ($ticket->getStatus() === 'waiting_capillaire') {
+            return ['service' => 'Ingénierie Capillaire', 'user' => null];
+        }
+        if ($ticket->getStatus() === 'waiting_swap') {
+            return ['service' => 'Ingénierie IP (swap)', 'user' => null];
+        }
+        if ($ticket->getStatus() === 'waiting_other_service') {
+            return ['service' => 'Autre service', 'user' => null];
+        }
+
         foreach ($ticket->getTasks() as $task) {
             if ($task->getStatus() === 'blocked') {
-                return ['service' => $task->getServiceName(), 'user' => $task->getAssignedTo(), 'since' => $task->getUpdatedAt() ?? $task->getCreatedAt()];
+                return [
+                    'service' => $task->getServiceName(),
+                    'user' => $task->getAssignedTo(),
+                    'since' => $task->getUpdatedAt() ?? $task->getCreatedAt()
+                ];
             }
         }
         return null;
     }
+
+
+    // Ajoutez cette méthode dans SuperuserWorkflowController
+
+#[Route('/ticket/{id}/comment', name: 'superuser_workflow_comment', methods: ['POST'])]
+public function addComment(Ticket $ticket, Request $request, EntityManagerInterface $em, TicketWorkflowService $workflowService): Response
+{
+    $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
+
+    $message = trim((string) $request->request->get('message'));
+    if (empty($message)) {
+        $this->addFlash('error', 'Le commentaire ne peut pas être vide.');
+        return $this->redirectToRoute('superuser_workflow_show', ['id' => $ticket->getId()]);
+    }
+
+    $comment = new TicketComment();
+    $comment->setTicket($ticket);
+    $comment->setUser($this->getUser());
+    $comment->setMessage($message);
+
+    $uploadedFile = $request->files->get('filePath');
+    if ($uploadedFile) {
+        $filename = uniqid('ticket_comment_', true) . '.' . $uploadedFile->guessExtension();
+        $uploadedFile->move($this->getParameter('ticket_proofs_directory'), $filename);
+        $comment->setFilePath($filename);
+    }
+
+    $em->persist($comment);
+    $workflowService->addHistory($ticket, $this->getUser(), 'comment_added', 'Commentaire ajouté.');
+    $em->flush();
+
+    $this->addFlash('success', 'Commentaire ajouté.');
+    return $this->redirectToRoute('superuser_workflow_show', ['id' => $ticket->getId()]);
+}
+
+
 }

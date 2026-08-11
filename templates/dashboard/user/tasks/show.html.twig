@@ -22,14 +22,14 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for ts in task.ticket.ticketSites %}
+                        {% for site in sites %}
                             {% set siteIndex = loop.index0 %}
-                            {% set siteDecision = task.siteDecisions[ts.id] ?? null %}
-                            <tr class="site-row" data-site-id="{{ ts.id }}">
-                                <td class="px-4 py-2 border">{{ ts.siteName }} ({{ ts.typeTrans }})</td>
-                                <td class="px-4 py-2 border">{{ ts.typeTrans }}</td>
+                            {% set siteDecision = task.siteDecisions[site.id] ?? null %}
+                            <tr class="site-row" data-site-id="{{ site.id }}">
+                                <td class="px-4 py-2 border">{{ site.siteName }}</td>
+                                <td class="px-4 py-2 border">{{ site.typeTrans }}</td>
                                 <td class="px-4 py-2 border">
-                                    <select name="decision[{{ ts.id }}]" class="decision-select" data-site-id="{{ ts.id }}">
+                                    <select name="decision[{{ site.id }}]" class="decision-select" data-site-id="{{ site.id }}">
                                         <option value="">-- Choisir --</option>
                                         <option value="OK" {% if siteDecision and siteDecision.decision == 'OK' %}selected{% endif %}>OK – Faisable</option>
                                         <option value="NOK_2EME_PAIRE" {% if siteDecision and siteDecision.decision == 'NOK_2EME_PAIRE' %}selected{% endif %}>NOK – Besoin 2ème paire FO</option>
@@ -38,14 +38,14 @@
                                 </td>
                                 <td class="px-4 py-2 border">
                                     <div class="woip-field" style="display: {% if siteDecision and siteDecision.decision == 'OK' %}block{% else %}none{% endif %};">
-                                        <input type="text" name="wo_ip[{{ ts.id }}]" class="border rounded p-1 w-full" placeholder="Réf. WO IP" value="{{ siteDecision.wo_ip_reference ?? '' }}">
+                                        <input type="text" name="wo_ip[{{ site.id }}]" class="border rounded p-1 w-full" placeholder="Réf. WO IP" value="{{ siteDecision.wo_ip_reference ?? '' }}">
                                     </div>
                                 </td>
                                 <td class="px-4 py-2 border">
-                                    <textarea name="comment[{{ ts.id }}]" rows="2" class="border rounded p-1 w-full">{{ siteDecision.comment ?? '' }}</textarea>
+                                    <textarea name="comment[{{ site.id }}]" rows="2" class="border rounded p-1 w-full">{{ siteDecision.comment ?? '' }}</textarea>
                                 </td>
                                 <td class="px-4 py-2 border text-center">
-                                    <button type="button" class="save-site-btn bg-blue-600 text-white px-2 py-1 rounded text-sm" data-site-id="{{ ts.id }}">Enregistrer</button>
+                                    <button type="button" class="save-site-btn bg-blue-600 text-white px-2 py-1 rounded text-sm" data-site-id="{{ site.id }}">Enregistrer</button>
                                 </td>
                             </tr>
                         {% endfor %}

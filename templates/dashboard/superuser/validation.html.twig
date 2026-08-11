@@ -1,0 +1,204 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<style>
+    .validation-container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; }
+    .card { background:#fff; border-radius:.75rem; border:1px solid #e9edf4; padding:1.25rem; margin-bottom:1.25rem; }
+    .section-title { font-size:.95rem; font-weight:600; color:#1e293b; margin-bottom:.8rem; }
+    .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; }
+    @media (max-width:640px) { .grid-2 { grid-template-columns:1fr; } }
+    .form-group { margin-bottom:.9rem; }
+    .form-label { display:block; font-size:.78rem; font-weight:500; color:#334155; margin-bottom:.2rem; }
+    .form-control { width:100%; border:1px solid #d1d5db; border-radius:.4rem; padding:.4rem .6rem; font-size:.85rem; background:#fff; }
+    .form-control:focus { outline:none; border-color:#2e75b6; }
+    .btn-success { padding:.5rem 1.2rem; border-radius:.4rem; border:none; font-weight:600; cursor:pointer; background:#16a34a; color:#fff; }
+    .btn-success:hover { background:#15803d; }
+    .btn-success:disabled { background:#9ca3af; cursor:not-allowed; }
+    .btn-warning { padding:.5rem 1.2rem; border-radius:.4rem; border:none; font-weight:600; cursor:pointer; background:#f59e0b; color:#fff; }
+    .btn-warning:hover { background:#d97706; }
+    .btn-danger { padding:.5rem 1.2rem; border-radius:.4rem; border:none; font-weight:600; cursor:pointer; background:#ef4444; color:#fff; }
+    .btn-danger:hover { background:#dc2626; }
+    .btn-secondary { padding:.5rem 1.2rem; border-radius:.4rem; border:none; font-weight:600; cursor:pointer; background:#94a3b8; color:#fff; }
+    .btn-secondary:hover { background:#64748b; }
+    .badge-status { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 9999px; font-size: 0.65rem; font-weight: 600; text-transform: capitalize; }
+    .badge-validated { background: #d1fae5; color: #065f46; }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-supervision { background: #dbeafe; color: #1e40af; }
+    .badge-rejected { background: #fee2e2; color: #991b1b; }
+    .progress-bar { width:100%; height:.5rem; background:#e2e8f0; border-radius:9999px; overflow:hidden; margin:.5rem 0; }
+    .progress-bar .fill { height:100%; background:#2e75b6; border-radius:9999px; }
+    .site-card { border: 2px solid #e2e8f0; border-radius: 0.75rem; padding: 1.25rem; margin-bottom: 1.25rem; transition: border-color 0.3s; }
+    .site-card.validated { border-color: #10b981; background: #f0fdf4; }
+    .site-card.supervision { border-color: #3b82f6; background: #eff6ff; }
+    .site-card.rejected { border-color: #ef4444; background: #fef2f2; }
+    .btn-back-rose {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: #ec4899;
+        color: #fff;
+        padding: 0.5rem 1.2rem;
+        border-radius: 40px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        border: none;
+        text-decoration: none;
+        transition: background 0.2s, transform 0.1s;
+        box-shadow: 0 4px 10px rgba(236, 72, 153, 0.25);
+        margin-bottom: 1rem;
+    }
+    .btn-back-rose:hover { background: #db2777; color: #fff; text-decoration: none; transform: translateY(-1px); }
+    .capacity-updated-tag { display:inline-block; margin-top:6px; font-size:.72rem; color:#1d4ed8; background:#eff6ff; padding:2px 8px; border-radius:999px; font-weight:600; }
+</style>
+
+<div class="validation-container">
+    <a href="{{ path('superuser_workflow_show', {id: ticket.id}) }}" class="btn-back-rose">← Retour au ticket</a>
+
+    <h1 class="text-2xl font-bold mb-2">Validation KPI</h1>
+    <p class="text-sm text-gray-500 mb-4">Ticket #{{ ticket.id }} — {{ ticket.title }}</p>
+
+    {# Progression globale #}
+    {% set validatedCount = 0 %}
+    {% set totalSites = ticket.ticketSites|length %}
+    {% for ts in ticket.ticketSites %}
+        {% if ts.status == 'validated' or ts.status == 'supervision' %}
+            {% set validatedCount = validatedCount + 1 %}
+        {% endif %}
+    {% endfor %}
+    {% set progress = totalSites > 0 ? (validatedCount / totalSites * 100)|round : 0 %}
+
+    <div class="card">
+        <div class="grid-2">
+            <div>
+                <span class="text-sm text-gray-500">Progression validation :</span>
+                <span class="font-semibold">{{ validatedCount }}/{{ totalSites }} sites</span>
+            </div>
+            <div>
+                <span class="text-sm text-gray-500">Statut ticket :</span>
+                <span class="badge-status 
+                    {% if allValidated %}badge-validated
+                    {% else %}badge-pending{% endif %}">
+                    {% if allValidated %}✅ Validé{% else %}⏳ En cours{% endif %}
+                </span>
+            </div>
+        </div>
+        <div class="progress-bar">
+            <div class="fill" style="width: {{ progress }}%;"></div>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">{{ progress }}%</p>
+        {% if not allValidated %}
+            <p class="text-xs text-gray-400 mt-1">ℹ️ Le workflow ne se clôture que lorsque TOUS les sites ci-dessous sont validés ou en supervision.</p>
+        {% endif %}
+    </div>
+
+    {# Liste des sites avec leur statut de validation #}
+    {% for site in sites %}
+        {% set siteStatus = 'pending' %}
+        {% for ts in ticket.ticketSites %}
+            {% if ts.siteName == site.siteName %}
+                {% set siteStatus = ts.status %}
+            {% endif %}
+        {% endfor %}
+
+        <div class="site-card 
+            {% if siteStatus == 'validated' %}validated
+            {% elseif siteStatus == 'supervision' %}supervision
+            {% elseif siteStatus == 'rejected' %}rejected{% endif %}">
+
+            <div class="flex justify-between items-start">
+                <div>
+                    <h3 class="text-lg font-bold">{{ site.siteName }}</h3>
+                    <p class="text-sm text-gray-500">Capacité actuelle : {{ site.capaciteMbps|default('Non définie') }} Mbps</p>
+                    <p class="text-sm text-gray-500">Trafic max : {{ site.maxTrafic|default('N/A') }} Mbps</p>
+                    <p class="text-sm">
+                        Statut validation : 
+                        <span class="badge-status 
+                            {% if siteStatus == 'validated' %}badge-validated
+                            {% elseif siteStatus == 'supervision' %}badge-supervision
+                            {% elseif siteStatus == 'rejected' %}badge-rejected
+                            {% else %}badge-pending{% endif %}">
+                            {% if siteStatus == 'validated' %}✅ Validé
+                            {% elseif siteStatus == 'supervision' %}🔍 Supervision
+                            {% elseif siteStatus == 'rejected' %}❌ Rejeté
+                            {% else %}⏳ En attente{% endif %}
+                        </span>
+                    </p>
+                    {% if site.capaciteUpdatedAt %}
+                        <span class="capacity-updated-tag">🕒 Capacité MAJ le {{ site.capaciteUpdatedAt|date('d/m/Y H:i') }}{% if site.lastActionPerformed %} — {{ site.lastActionPerformed }}{% endif %}</span>
+                    {% endif %}
+                </div>
+            <a href="{{ path('superuser_validation_site_show', {id: site.id, ticket_id: ticket.id}) }}" 
+   target="_blank" class="text-blue-600 hover:underline text-sm">
+    📊 Voir KPI
+</a>
+            </div>
+
+            {# Formulaire de validation – uniquement si le site n'est pas encore validé #}
+            {% if siteStatus != 'validated' and siteStatus != 'supervision' %}
+                <form method="post" action="{{ path('superuser_validation_site_validate', {id: site.id}) }}" class="mt-4">
+                    <input type="hidden" name="ticket_id" value="{{ ticket.id }}">
+
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="form-label">Nouvelle capacité (Mbps)</label>
+                            <input type="number" step="0.01" name="capacity" class="form-control" 
+                                   value="{{ site.capaciteMbps|default(0) }}" 
+                                   placeholder="Capacité en Mbps">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Jours de supervision</label>
+                            <input type="number" name="supervision_days" class="form-control" value="7" min="1" max="30">
+                        </div>
+                    </div>
+
+                    {# ✅ NOUVEAU : action réellement effectuée sur le site.
+                       Utilisée pour "Bouton Valider" uniquement -- traçabilité
+                       affichée ensuite dans le tableau des sites. #}
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="form-label">Action effectuée (validation uniquement)</label>
+                            <select name="action_performed" class="form-control">
+                                <option value="">— Choisir une action —</option>
+                                {% for typeKey, typeLabel in actionTypes %}
+                                    <option value="{{ typeLabel }}"{% if site.recommendedAction == typeKey %} selected{% endif %}>{{ typeLabel }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Ou préciser (facultatif, remplace le choix ci-dessus)</label>
+                            <input type="text" name="action_performed_custom" class="form-control" placeholder="Ex: Upgrade FO 1Gbps -> 2Gbps réalisé le 03/08">
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2 mt-2">
+                        <button type="submit" name="action" value="validate" class="btn-success">✅ Valider ce site</button>
+                        <button type="submit" name="action" value="supervise" class="btn-warning">🔍 Mettre en supervision</button>
+                        <button type="submit" name="action" value="reject" class="btn-danger">❌ Rejeter</button>
+                    </div>
+                </form>
+            {% elseif siteStatus == 'supervision' %}
+                <div class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700">
+                    🔍 Ce site est en supervision. La validation sera effectuée ultérieurement.
+                </div>
+            {% elseif siteStatus == 'validated' %}
+                <div class="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700">
+                    ✅ Ce site a déjà été validé.
+                </div>
+            {% endif %}
+        </div>
+    {% endfor %}
+
+    {# Bouton de clôture du ticket – uniquement si tous les sites sont validés #}
+    {% if allValidated %}
+        <div class="card" style="background: #f0fdf4; border-color: #10b981;">
+            <div class="text-center">
+                <h3 class="text-lg font-bold text-green-700">✅ Tous les sites sont validés</h3>
+                <p class="text-sm text-gray-600">Le ticket #{{ ticket.id }} va être clôturé automatiquement.</p>
+                <a href="{{ path('superuser_workflow_show', {id: ticket.id}) }}" class="btn-success mt-2">
+                    Retour au ticket clôturé
+                </a>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

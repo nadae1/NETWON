@@ -9,6 +9,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 /**
@@ -23,6 +24,11 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
  */
 class ImportController extends AbstractController
 {
+    public function __construct(
+        #[Autowire(env: 'PYTHON_API_BASE_URL')] private string $pythonApiBaseUrl,
+    ) {
+    }
+
     #[Route('/import/excel-post', name: 'import_excel_post', methods: ['POST'])]
     public function importExcel(
         Request $request,
@@ -39,7 +45,7 @@ class ImportController extends AbstractController
                 return new JsonResponse(['success' => false, 'message' => '3 fichiers obligatoires']);
             }
 
-            $response = $httpClient->request('POST', 'http://127.0.0.1:8001/traiter', [
+            $response = $httpClient->request('POST', $this->pythonApiBaseUrl . '/traiter', [
                 'body' => [
                     'trafic'       => fopen($trafic->getPathname(), 'r'),
                     'port'         => fopen($port->getPathname(), 'r'),

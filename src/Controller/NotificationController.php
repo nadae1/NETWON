@@ -15,15 +15,36 @@ use Symfony\Component\Routing\Attribute\Route;
 class NotificationController extends AbstractController
 {
     #[Route('', name: 'dashboard_notifications', methods: ['GET'])]
-    public function index(NotificationRepository $notificationRepository): Response
-    {
+    public function index(
+        Request $request,
+        NotificationRepository $notificationRepository
+    ): Response {
         $this->denyAccessUnlessGranted('ROLE_USER');
 
         /** @var User $user */
         $user = $this->getUser();
 
+        $typeFilter = $request->query->get('type', '');
+        $limit = 50;
+
+        // Récupérer les notifications filtrées
+        if ($typeFilter !== '') {
+            $notifications = $notificationRepository->findLatestForUserByType($user, $typeFilter, $limit);
+        } else {
+            $notifications = $notificationRepository->findLatestForUser($user, $limit);
+        }
+
+        // Statistiques
+        $stats = [
+            'total' => $notificationRepository->countForUser($user),
+            'unread' => $notificationRepository->countUnreadForUser($user),
+            'types' => $notificationRepository->countByTypeForUser($user),
+        ];
+
         return $this->render('dashboard/notifications/index.html.twig', [
-            'notifications' => $notificationRepository->findLatestForUser($user, 50),
+            'notifications' => $notifications,
+            'stats' => $stats,
+            'currentType' => $typeFilter,
         ]);
     }
 
@@ -48,5 +69,29 @@ class NotificationController extends AbstractController
 
         return $this->redirectToRoute('dashboard_notifications');
     }
-}
 
+    #[Route('/mark-all-read', name: 'dashboard_notifications_mark_all_read', methods: ['POST'])]
+    public function markAllRead(EntityManagerInterface $em): Response
+    {
+        $this->denyAccessUnlessGranted('ROLE_USER');
+
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $notifications = $em->getRepository(Notification::class)
+            ->createQueryBuilder('n')
+            ->where('n.user = :user')
+            ->andWhere('n.isRead = false')
+            ->setParameter('user', $user)
+            ->getQuery()
+            ->getResult();
+
+        foreach ($notifications as $n) {
+            $n->markRead();
+        }
+        $em->flush();
+
+        $this->addFlash('success', 'Toutes les notifications ont été marquées comme lues.');
+        return $this->redirectToRoute('dashboard_notifications');
+    }
+}

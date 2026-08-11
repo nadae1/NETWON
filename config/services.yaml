@@ -14,10 +14,17 @@ services:
             - '../src/DependencyInjection/'
             - '../src/Entity/'
             - '../src/Kernel.php'
-
+            
+    App\Chatbot\ChatbotService:
+        arguments:
+            $ollamaUrl: '%env(OLLAMA_URL)%'
+            $ollamaModel: 'llama3.1:8b'
     
-    App\Service\FastApiPortDetector: ~
+    App\Service\FastApiPortDetector:
+        arguments:
+            $apiBaseUrl: '%env(default::PYTHON_API_BASE_URL)%'
     App\EventListener\TicketDeadlineListener:
         tags:
             - { name: doctrine.event_listener, event: postPersist }
             - { name: doctrine.event_listener, event: postUpdate }
+    

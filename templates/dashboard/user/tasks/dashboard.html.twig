@@ -29,8 +29,13 @@
                             <td><strong>{{ task.title }}</strong></td>
                             <td>{{ task.ticket.title }}</td>
                             <td>
-                                {% for ts in task.ticket.ticketSites %}
-                                    {{ ts.siteName }} ({{ ts.typeTrans }}){% if not loop.last %}, {% endif %}
+                                {# Correction : uniquement les sites propres à CETTE tâche/service,
+                                   jamais task.ticket.ticketSites (tous les sites du ticket, tous services confondus) #}
+                                {% set taskSites = taskSitesMap[task.id] ?? [] %}
+                                {% for site in taskSites %}
+                                    {{ site.siteName }} ({{ site.typeTrans }}){% if not loop.last %}, {% endif %}
+                                {% else %}
+                                    <span class="text-gray-400">-</span>
                                 {% endfor %}
                             </td>
                             <td>{{ task.description|default('-')|slice(0, 80) }}{% if task.description|length > 80 %}...{% endif %}</td>

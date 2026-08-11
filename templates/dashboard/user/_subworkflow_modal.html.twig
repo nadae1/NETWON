@@ -1,0 +1,16 @@
+<details class="bg-white rounded-lg shadow p-4 mb-4">
+    <summary class="cursor-pointer text-lg font-semibold">Demande d'intervention externe</summary>
+    <div class="mt-4">
+        <form method="post" action="{{ path(actionRoute, {id: ticket.id}) }}">
+            <label class="block text-sm font-medium mb-2">Service cible</label>
+            <select name="target_service" class="w-full border rounded p-2 mb-4">
+                {% for service in services %}
+                    <option value="{{ service.name }}">{{ service.name }}</option>
+                {% endfor %}
+            </select>
+            <label class="block text-sm font-medium mb-2">Motif / description</label>
+            <textarea name="reason" rows="4" class="w-full border rounded p-2 mb-4"></textarea>
+            <button type="submit" class="bg-yellow-600 text-white px-4 py-2 rounded">Créer le sous-workflow</button>
+        </form>
+    </div>
+</details>

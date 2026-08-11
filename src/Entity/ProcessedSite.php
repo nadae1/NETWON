@@ -36,6 +36,18 @@ class ProcessedSite
     #[ORM\Column(nullable: true)]
     private ?float $maxTrafic = null;
 
+    #[ORM\Column(name: 'max_trafic_tdd', type: 'decimal', precision: 15, scale: 2, nullable: true)]
+    private ?float $maxTraficTdd = null;
+
+    #[ORM\Column(name: 'max_trafic_fdd', type: 'decimal', precision: 15, scale: 2, nullable: true)]
+    private ?float $maxTraficFdd = null;
+
+    #[ORM\Column(name: 'capacite_tdd_mbps', type: 'decimal', precision: 15, scale: 2, nullable: true)]
+    private ?float $capaciteTddMbps = null;
+
+    #[ORM\Column(name: 'capacite_fdd_mbps', type: 'decimal', precision: 15, scale: 2, nullable: true)]
+    private ?float $capaciteFddMbps = null;
+
     #[ORM\Column(type: 'datetime', nullable: true)]
     private ?\DateTimeInterface $dateMax = null;
 
@@ -45,25 +57,53 @@ class ProcessedSite
     #[ORM\Column]
     private int $nombreOccurrences = 0;
 
+    #[ORM\Column(name: 'nombre_occurrences_tdd', type: 'integer', nullable: true)]
+    private ?int $nombreOccurrencesTdd = null;
+
+    #[ORM\Column(name: 'nombre_occurrences_fdd', type: 'integer', nullable: true)]
+    private ?int $nombreOccurrencesFdd = null;
+
     #[ORM\Column]
     private int $totalMeasures = 0;
 
     #[ORM\Column(length: 50, nullable: true)]
-    private ?string $service = null;  // ← CHANGÉ: service_name → service
+    private ?string $service = null;
 
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $status = null;
+
+    #[ORM\Column(name: 'site_status', length: 20, nullable: true)]
+    private ?string $siteStatus = null;
 
     #[ORM\Column]
     private bool $isCritical = false;
 
     #[ORM\Column(length: 64, nullable: true)]
     private ?string $dataHash = null;
+
     #[ORM\Column(length: 100, nullable: true)]
     private ?string $recommendedAction = null;
 
-    #[ORM\Column(length: 20, nullable: true)]
-    private ?string $siteStatus = null; // 'critical', 'secured', 'warning'
+    #[ORM\Column(name: 'final_action_plan', length: 255, nullable: true)]
+    private ?string $finalActionPlan = null;
+
+    #[ORM\Column(name: 'taux_utilisation', type: 'float', nullable: true)]
+    private ?float $tauxUtilisation = null;
+
+    #[ORM\Column(name: 'taux_utilisation_tdd', type: 'float', nullable: true)]
+    private ?float $tauxUtilisationTdd = null;
+
+    #[ORM\Column(name: 'taux_utilisation_fdd', type: 'float', nullable: true)]
+    private ?float $tauxUtilisationFdd = null;
+
+    #[ORM\Column(name: 'dropcong_tdd', type: 'integer', nullable: true)]
+    private ?int $dropCongTdd = null;
+
+    #[ORM\Column(name: 'dropcong_fdd', type: 'integer', nullable: true)]
+    private ?int $dropCongFdd = null;
+
+    #[ORM\Column(name: 'dropcong_tf', type: 'integer', nullable: true)]
+    private ?int $dropCongTf = null;
 
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $latitude = null;
@@ -73,6 +113,58 @@ class ProcessedSite
 
     #[ORM\Column(type: 'datetime', nullable: true)]
     private ?\DateTimeInterface $supervisionUntil = null;
+
+    #[ORM\Column(type: 'datetime', nullable: true)]
+    private ?\DateTimeInterface $reminderSnoozedUntil = null;
+
+    #[ORM\Column(name: 'capacite_mbps', type: 'decimal', precision: 15, scale: 2, nullable: true)]
+    private ?float $capaciteMbps = null;
+
+    #[ORM\Column(type: 'datetime', nullable: true)]
+    private ?\DateTimeInterface $observationUntil = null;
+
+    #[ORM\Column(name: 'capacity_reminder_until', type: 'datetime', nullable: true)]
+    private ?\DateTimeInterface $capacityReminderUntil = null;
+
+    /**
+     * ✅ NOUVEAU : date de la dernière mise à jour de capacité effectuée
+     * manuellement ou via import (capacite.py, validation superuser,
+     * complétion Plan Data). Reste NULL tant que la capacité déclarée
+     * n'a jamais été (re)touchée après le traitement trafic initial.
+     */
+    #[ORM\Column(name: 'capacite_updated_at', type: 'datetime', nullable: true)]
+    private ?\DateTimeInterface $capaciteUpdatedAt = null;
+
+    /**
+     * ✅ NOUVEAU : libellé de la dernière action réellement effectuée sur
+     * ce site (ex: "Upgrade capacité FDD", "Swap TF", "Import capacité
+     * (FH)"...), distinct de recommendedAction/finalActionPlan qui sont
+     * la recommandation IA -- ce champ trace ce qui a VRAIMENT été fait.
+     */
+    #[ORM\Column(name: 'last_action_performed', length: 255, nullable: true)]
+    private ?string $lastActionPerformed = null;
+
+    public function getCapaciteUpdatedAt(): ?\DateTimeInterface
+    {
+        return $this->capaciteUpdatedAt;
+    }
+
+    public function setCapaciteUpdatedAt(?\DateTimeInterface $capaciteUpdatedAt): static
+    {
+        $this->capaciteUpdatedAt = $capaciteUpdatedAt;
+        return $this;
+    }
+
+    public function getLastActionPerformed(): ?string
+    {
+        return $this->lastActionPerformed;
+    }
+
+    public function setLastActionPerformed(?string $lastActionPerformed): static
+    {
+        $this->lastActionPerformed = $lastActionPerformed;
+        return $this;
+    }
 
     public function getSupervisionUntil(): ?\DateTimeInterface
     {
@@ -84,11 +176,16 @@ class ProcessedSite
         return $this;
     }
 
-    #[ORM\Column(name: 'capacite_mbps', type: 'decimal', precision: 15, scale: 2, nullable: true)]
-    private ?float $capaciteMbps = null;
+    public function getReminderSnoozedUntil(): ?\DateTimeInterface
+    {
+        return $this->reminderSnoozedUntil;
+    }
 
-    #[ORM\Column(type: 'datetime', nullable: true)]
-    private ?\DateTimeInterface $observationUntil = null;
+    public function setReminderSnoozedUntil(?\DateTimeInterface $reminderSnoozedUntil): static
+    {
+        $this->reminderSnoozedUntil = $reminderSnoozedUntil;
+        return $this;
+    }
 
     public function getObservationUntil(): ?\DateTimeInterface
     {
@@ -110,32 +207,54 @@ class ProcessedSite
         return $this;
     }
 
-
-    public function getLatitude(): ?string
+    public function getLatitude(): ?float
     {
         return $this->latitude;
     }
-    public function setLatitude(?string $lat): self
+    public function setLatitude(?float $lat): self
     {
         $this->latitude = $lat;
         return $this;
     }
 
-
-    public function getLongitude(): ?string
+    public function getLongitude(): ?float
     {
         return $this->longitude;
     }
-    public function setLongitude(?string $lng): self
+    public function setLongitude(?float $lng): self
     {
         $this->longitude = $lng;
         return $this;
     }
 
+    public function getCapacityReminderUntil(): ?\DateTimeInterface
+    {
+        return $this->capacityReminderUntil;
+    }
 
+    public function setCapacityReminderUntil(?\DateTimeInterface $capacityReminderUntil): static
+    {
+        $this->capacityReminderUntil = $capacityReminderUntil;
+        return $this;
+    }
 
+    public function needsCapacityOrTypeUpdate(): bool
+    {
+        $missingCapacity = $this->capaciteMbps === null || $this->capaciteMbps <= 0;
+        $type = strtoupper(trim((string) $this->typeTrans));
+        $missingType = $type === '' || in_array($type, ['NON_DEFINI', 'UNKNOWN', 'N/A', 'NA', '-'], true);
 
-    // getter / setter
+        if (!$missingCapacity && !$missingType) {
+            return false;
+        }
+
+        if ($this->capacityReminderUntil !== null && $this->capacityReminderUntil > new \DateTime()) {
+            return false;
+        }
+
+        return true;
+    }
+
     public function getRecommendedAction(): ?string
     {
         return $this->recommendedAction;
@@ -146,6 +265,82 @@ class ProcessedSite
         return $this;
     }
 
+    public function getFinalActionPlan(): ?string
+    {
+        return $this->finalActionPlan;
+    }
+
+    public function setFinalActionPlan(?string $finalActionPlan): self
+    {
+        $this->finalActionPlan = $finalActionPlan;
+        return $this;
+    }
+
+    public function getTauxUtilisation(): ?float
+    {
+        return $this->tauxUtilisation;
+    }
+
+    public function setTauxUtilisation(?float $tauxUtilisation): self
+    {
+        $this->tauxUtilisation = $tauxUtilisation;
+        return $this;
+    }
+
+    public function getTauxUtilisationTdd(): ?float
+    {
+        return $this->tauxUtilisationTdd;
+    }
+
+    public function setTauxUtilisationTdd(?float $tauxUtilisationTdd): self
+    {
+        $this->tauxUtilisationTdd = $tauxUtilisationTdd;
+        return $this;
+    }
+
+    public function getTauxUtilisationFdd(): ?float
+    {
+        return $this->tauxUtilisationFdd;
+    }
+
+    public function setTauxUtilisationFdd(?float $tauxUtilisationFdd): self
+    {
+        $this->tauxUtilisationFdd = $tauxUtilisationFdd;
+        return $this;
+    }
+
+    public function getDropCongTdd(): ?int
+    {
+        return $this->dropCongTdd;
+    }
+
+    public function setDropCongTdd(?int $dropCongTdd): self
+    {
+        $this->dropCongTdd = $dropCongTdd;
+        return $this;
+    }
+
+    public function getDropCongFdd(): ?int
+    {
+        return $this->dropCongFdd;
+    }
+
+    public function setDropCongFdd(?int $dropCongFdd): self
+    {
+        $this->dropCongFdd = $dropCongFdd;
+        return $this;
+    }
+
+    public function getDropCongTf(): ?int
+    {
+        return $this->dropCongTf;
+    }
+
+    public function setDropCongTf(?int $dropCongTf): self
+    {
+        $this->dropCongTf = $dropCongTf;
+        return $this;
+    }
 
     public function getId(): ?int
     {
@@ -218,6 +413,50 @@ class ProcessedSite
         return $this;
     }
 
+    public function getMaxTraficTdd(): ?float
+    {
+        return $this->maxTraficTdd;
+    }
+
+    public function setMaxTraficTdd(?float $maxTraficTdd): static
+    {
+        $this->maxTraficTdd = $maxTraficTdd;
+        return $this;
+    }
+
+    public function getMaxTraficFdd(): ?float
+    {
+        return $this->maxTraficFdd;
+    }
+
+    public function setMaxTraficFdd(?float $maxTraficFdd): static
+    {
+        $this->maxTraficFdd = $maxTraficFdd;
+        return $this;
+    }
+
+    public function getCapaciteTddMbps(): ?float
+    {
+        return $this->capaciteTddMbps;
+    }
+
+    public function setCapaciteTddMbps(?float $capaciteTddMbps): static
+    {
+        $this->capaciteTddMbps = $capaciteTddMbps;
+        return $this;
+    }
+
+    public function getCapaciteFddMbps(): ?float
+    {
+        return $this->capaciteFddMbps;
+    }
+
+    public function setCapaciteFddMbps(?float $capaciteFddMbps): static
+    {
+        $this->capaciteFddMbps = $capaciteFddMbps;
+        return $this;
+    }
+
     public function getDateMax(): ?\DateTimeInterface
     {
         return $this->dateMax;
@@ -251,6 +490,28 @@ class ProcessedSite
         return $this;
     }
 
+    public function getNombreOccurrencesTdd(): ?int
+    {
+        return $this->nombreOccurrencesTdd;
+    }
+
+    public function setNombreOccurrencesTdd(?int $nombreOccurrencesTdd): static
+    {
+        $this->nombreOccurrencesTdd = $nombreOccurrencesTdd;
+        return $this;
+    }
+
+    public function getNombreOccurrencesFdd(): ?int
+    {
+        return $this->nombreOccurrencesFdd;
+    }
+
+    public function setNombreOccurrencesFdd(?int $nombreOccurrencesFdd): static
+    {
+        $this->nombreOccurrencesFdd = $nombreOccurrencesFdd;
+        return $this;
+    }
+
     public function getTotalMeasures(): int
     {
         return $this->totalMeasures;
@@ -273,7 +534,6 @@ class ProcessedSite
         return $this;
     }
 
-    // Alias pour compatibilité ascendante
     public function getServiceName(): ?string
     {
         return $this->service;
@@ -293,6 +553,17 @@ class ProcessedSite
     public function setStatus(?string $status): static
     {
         $this->status = $status;
+        return $this;
+    }
+
+    public function getSiteStatus(): ?string
+    {
+        return $this->siteStatus;
+    }
+
+    public function setSiteStatus(?string $siteStatus): static
+    {
+        $this->siteStatus = $siteStatus;
         return $this;
     }
 

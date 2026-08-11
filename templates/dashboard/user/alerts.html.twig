@@ -3,35 +3,97 @@
 {% block dashboard_content %}
 <div class="workflow-page">
     <div class="page-header">
-        <div>
-            <h2 class="page-title">Alertes</h2>
-            <div class="page-desc">Sites critiques et retards de workflow</div>
-        </div>
     </div>
 
-    {# Statistiques et graphique #}
-    <div style="display: flex; gap: 30px; margin-bottom: 30px; flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 150px;">
-            <div style="background: #f8fafc; border-radius: 16px; padding: 20px; text-align: center; border: 1px solid #e2e8f0;">
-                <div style="font-size: 32px; font-weight: 800; color: #dc2626;">{{ nbDelayAlerts }}</div>
-                <div style="color: #475569;">Tickets en retard</div>
+    <div style="display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 140px;">
+            <div style="background: #fef2f2; border-radius: 16px; padding: 18px; text-align: center; border: 1px solid #fecaca;">
+                <div style="font-size: 28px; font-weight: 800; color: #dc2626;">{{ siteAlertCounts.CONGESTION }}</div>
+                <div style="color: #7f1d1d; font-size: 13px; font-weight: 600;">Congestion (7j)</div>
             </div>
         </div>
-        <div style="flex: 1; min-width: 150px;">
-            <div style="background: #f8fafc; border-radius: 16px; padding: 20px; text-align: center; border: 1px solid #e2e8f0;">
-                <div style="font-size: 32px; font-weight: 800; color: #dc2626;">{{ nbCriticalSites }}</div>
-                <div style="color: #475569;">Sites critiques</div>
+        <div style="flex: 1; min-width: 140px;">
+            <div style="background: #fff7ed; border-radius: 16px; padding: 18px; text-align: center; border: 1px solid #fed7aa;">
+                <div style="font-size: 28px; font-weight: 800; color: #ea580c;">{{ siteAlertCounts.BRIDAGE }}</div>
+                <div style="color: #7c2d12; font-size: 13px; font-weight: 600;">Bridage (7j)</div>
             </div>
         </div>
-        <div style="flex: 2; min-width: 250px; height: 150px;">
+        <div style="flex: 1; min-width: 140px;">
+            <div style="background: #fffbeb; border-radius: 16px; padding: 18px; text-align: center; border: 1px solid #fde68a;">
+                <div style="font-size: 28px; font-weight: 800; color: #d97706;">{{ siteAlertCounts.RISQUE_DE_CONGESTION }}</div>
+                <div style="color: #78350f; font-size: 13px; font-weight: 600;">Risque congestion (7j)</div>
+            </div>
+        </div>
+        <div style="flex: 1; min-width: 140px;">
+            <div style="background: #f8fafc; border-radius: 16px; padding: 18px; text-align: center; border: 1px solid #e2e8f0;">
+                <div style="font-size: 28px; font-weight: 800; color: #dc2626;">{{ nbDelayAlerts }}</div>
+                <div style="color: #475569; font-size: 13px; font-weight: 600;">Tickets en retard</div>
+            </div>
+        </div>
+        <div style="flex: 2; min-width: 250px; height: 130px;">
             <canvas id="alertsChart" style="width:100%; height:100%;"></canvas>
         </div>
     </div>
 
-    {# Tableau des alertes de retard #}
     <div class="card">
+    <h3 class="panel-title">📡 Alertes réseau récentes</h3>
+    <p class="alerts-note">
+        ℹ️ Ces compteurs mesurent des <strong>événements d'alerte sur 7 jours glissants</strong> (par état détaillé),
+        à ne pas confondre avec le nombre de sites marqués « Critique » sur la page Home (photo instantanée du statut actuel).
+    </p>
+    {% if siteAlerts is empty %}
+        <div class="empty-state">✅ Aucune alerte réseau récente.</div>
+    {% else %}
+        <div class="alerts-scroll-wrap">
+            <table class="workflow-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Site</th>
+                        <th>État</th>
+                        <th>Trafic / Capacité</th>
+                        <th>Taux</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in siteAlerts %}
+                        <tr>
+                            <td>{{ a.date_alerte|date('d/m/Y H:i') }}</td>
+                            <td><strong>{{ a.site }}</strong></td>
+                            <td>
+                                {% if a.etat starts with 'CONGESTION' %}
+                                    <span class="badge red">{{ a.etat }}</span>
+                                {% elseif a.etat == 'BRIDAGE' %}
+                                    <span class="badge orange">BRIDAGE</span>
+                                {% elseif a.etat == 'RISQUE_DE_CONGESTION' %}
+                                    <span class="badge orange">RISQUE</span>
+                                {% elseif a.etat == 'SANS_TYPE' %}
+                                    <span class="badge gray">SANS TYPE</span>
+                                {% else %}
+                                    <span class="badge gray">{{ a.etat }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if a.trafic_j is not null and a.capacite_mbps is not null %}
+                                    {{ a.trafic_j|number_format(0, '.', ' ') }} / {{ a.capacite_mbps|number_format(0, '.', ' ') }} Mbps
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ a.taux_utilisation is not null ? a.taux_utilisation|number_format(1, '.', ' ') ~ '%' : '-' }}</td>
+                            <td>{{ a.message }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card" style="margin-top: 30px;">
         <h3 class="panel-title">🔴 Alertes de retard de workflow</h3>
-        {% set deadlineNotifications = notifications|filter(n => n.type starts with 'deadline_') %}
+        {% set deadlineNotifications = notifications|filter(n => n.type in ['deadline_reminder', 'ticket_overdue', 'deadline_overdue', 'deadline_yellow', 'deadline_red']) %}
         {% if deadlineNotifications is empty %}
             <div class="empty-state">✅ Aucune alerte de retard.</div>
         {% else %}
@@ -51,7 +113,7 @@
                         <tr>
                             <td>{{ n.createdAt|date('d/m/Y H:i') }}</td>
                             <td>
-                                {% if n.type == 'deadline_overdue' %}
+                                {% if n.type in ['deadline_overdue', 'ticket_overdue', 'deadline_reminder'] %}
                                     <span class="badge red">🚨 Dépassé</span>
                                 {% elseif n.type == 'deadline_yellow' or n.type == 'deadline_red' %}
                                     <span class="badge orange">🟡 Alerte</span>
@@ -61,7 +123,8 @@
                             </td>
                             <td>
                                 {% if n.ticket %}
-<a href="{{ path('user_workflow_show', {id: n.ticket.id}) }}">#{{ n.ticket.id }}</a>                                {% else %}
+                                    <a href="{{ path('user_workflow_show', {id: n.ticket.id}) }}">#{{ n.ticket.id }}</a>
+                                {% else %}
                                     -
                                 {% endif %}
                             </td>
@@ -83,9 +146,8 @@
         {% endif %}
     </div>
 
-    {# Tableau des sites critiques #}
     <div class="card" style="margin-top: 30px;">
-        <h3 class="panel-title">📡 Alertes réseau (sites critiques)</h3>
+        <h3 class="panel-title">📡 Mes sites critiques</h3>
         {% if criticalSites is empty %}
             <div class="empty-state">✅ Aucune alerte critique</div>
         {% else %}
@@ -93,7 +155,6 @@
                 <thead>
                     <tr>
                         <th>Site</th>
-                        <th>Service</th>
                         <th>Classification</th>
                         <th>Occurrences</th>
                         <th>Date max</th>
@@ -104,7 +165,6 @@
                     {% for site in criticalSites %}
                         <tr>
                             <td>{{ site.siteName }}</td>
-                            <td>{{ site.serviceName }}</td>
                             <td>{{ site.classification }}</td>
                             <td>{{ site.nombreOccurrences }}</td>
                             <td>{{ site.dateMax|date('d/m/Y H:i') }}</td>
@@ -124,39 +184,57 @@
         new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: ['Tickets en retard', 'Sites critiques'],
+                labels: ['Congestion', 'Bridage', 'Risque', 'Retards'],
                 datasets: [{
                     label: 'Nombre d\'alertes',
-                    data: [{{ nbDelayAlerts }}, {{ nbCriticalSites }}],
-                    backgroundColor: ['#ef4444', '#f59e0b'],
+                    data: [
+                        {{ siteAlertCounts.CONGESTION }},
+                        {{ siteAlertCounts.BRIDAGE }},
+                        {{ siteAlertCounts.RISQUE_DE_CONGESTION }},
+                        {{ nbDelayAlerts }}
+                    ],
+                    backgroundColor: ['#dc2626', '#ea580c', '#d97706', '#ef4444'],
                     borderRadius: 6,
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: { stepSize: 1 }
-                    }
-                }
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
             }
         });
     });
 </script>
-
 <style>
     .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
     .badge.red { background: #fee2e2; color: #dc2626; }
     .badge.orange { background: #fef3c7; color: #d97706; }
+    .badge.gray { background: #f1f5f9; color: #64748b; }
     .badge-open { background: #dbeafe; color: #2563eb; }
     .badge-in_progress { background: #fef3c7; color: #d97706; }
     .badge-completed { background: #dcfce7; color: #16a34a; }
     .badge-closed { background: #e2e8f0; color: #475569; }
     .badge-blocked { background: #fee2e2; color: #dc2626; }
+
+    /* --- Scroll sur les tableaux pour réduire la hauteur --- */
+    .alerts-scroll-wrap {
+        max-height: 420px;
+        overflow-y: auto;
+        border: 1px solid #f1f5f9;
+        border-radius: 10px;
+    }
+    .alerts-scroll-wrap .workflow-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #f8fafc;
+    }
+    .alerts-note {
+        font-size: 12px;
+        color: #94a3b8;
+        margin-top: -6px;
+        margin-bottom: 14px;
+    }
 </style>
 {% endblock %}

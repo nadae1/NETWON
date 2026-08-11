@@ -1,0 +1,47 @@
+{% if tasks is empty %}
+    <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded">
+        Aucune tâche définie pour ce ticket.
+    </div>
+{% else %}
+    <div class="space-y-4">
+        {% for task in tasks %}
+            <form method="post" enctype="multipart/form-data" action="{{ path(updateRoute, {id: ticket.id, taskId: task.id}) }}" class="bg-white rounded-lg shadow p-4">
+                <div class="flex items-start gap-4">
+                    <div class="flex-shrink-0 mt-1">
+                        <input type="checkbox" name="completed" value="1" class="h-5 w-5" {% if task.status == 'completed' or task.status == 'done' %}checked disabled{% endif %}>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h3 class="font-semibold text-lg">{{ task.title }}</h3>
+                                <p class="text-sm text-gray-600">{{ task.description }}</p>
+                                {% if task.serviceName %}
+                                    <span class="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded mt-2">Service: {{ task.serviceName }}</span>
+                                {% endif %}
+                            </div>
+                            <span class="text-xs font-semibold {% if task.status == 'done' %}text-green-600{% elseif task.status == 'in_progress' %}text-yellow-600{% else %}text-gray-600{% endif %}">
+                                {{ task.status|replace({'_': ' '})|upper }}
+                            </span>
+                        </div>
+                        {% if task.requiresCapture %}
+                            <div class="mt-3">
+                                <label class="block text-sm font-medium">Capture écran</label>
+                                <input type="file" name="capture" accept="image/*" class="mt-2 block w-full text-sm text-gray-700" />
+                                {% if task.capturePath %}
+                                    <p class="text-xs text-blue-600 mt-2"><a href="{{ asset(task.capturePath) }}" target="_blank">Voir la capture actuelle</a></p>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                        <div class="mt-3">
+                            <label class="block text-sm font-medium">Commentaire</label>
+                            <textarea name="comment" rows="3" class="w-full border rounded p-2 mt-1">{{ task.comment }}</textarea>
+                        </div>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Mettre à jour</button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        {% endfor %}
+    </div>
+{% endif %}

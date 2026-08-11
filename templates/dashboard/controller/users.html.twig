@@ -1,0 +1,185 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="dashboard-home dashboard-home--controller">
+    <div class="dashboard-home-toolbar">
+        <div>
+            <h1 class="page-title">Utilisateurs</h1>
+            <div class="page-subtitle">Comptes ROLE_USER gérés par le contrôleur</div>
+        </div>
+
+        <div class="dashboard-home-actions">
+            <a href="{{ path('controller_user_new') }}" class="btn-primary">+ Créer un utilisateur</a>
+        </div>
+    </div>
+
+    <div class="card">
+        {% if users is empty %}
+            <div class="empty-state">Aucun utilisateur ROLE_USER trouvé.</div>
+        {% else %}
+            <div class="table-like">
+                <div class="table-row table-row-head">
+                    <div>Username</div>
+                    <div>Email</div>
+                    <div>Service</div>
+                    <div>Département</div>
+                    <div>Rôle</div>
+                    <div>Actions</div>
+                </div>
+
+                {% for user in users %}
+                    <div class="table-row">
+                        <div><strong>{{ user.username }}</strong></div>
+                        <div>{{ user.email ?: '-' }}</div>
+                        <div>
+                            <span class="badge {% if user.service == 'FO' %}blue{% elseif user.service == 'FH' %}orange{% elseif user.service == 'DEPLOIEMENT' %}purple{% elseif user.service == 'SHARED' %}gray{% else %}gray{% endif %}">
+    {{ user.service ?: '-' }}
+</span>
+                        </div>
+                        <div>{{ user.department ?: '-' }}</div>
+                        <div><span class="badge green">ROLE_USER</span></div>
+                        <div>
+                            <a href="{{ path('controller_user_edit', {id: user.id}) }}" class="btn-secondary btn-sm">Modifier</a>
+                            <button type="button" class="btn-danger btn-sm" onclick="confirmDelete('{{ user.id }}', '{{ user.username }}')">Supprimer</button>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+
+<!-- Modal de confirmation de suppression -->
+<div id="deleteModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Confirmer la suppression</h2>
+        </div>
+        <div class="modal-body">
+            <p>Êtes-vous sûr de vouloir supprimer l'utilisateur <strong id="deleteUsername"></strong> ?</p>
+            <p class="text-danger">Cette action est irréversible.</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-secondary" onclick="closeModal()">Annuler</button>
+            <form id="deleteForm" method="POST" style="display:inline;">
+                <button type="submit" class="btn-danger">Confirmer la suppression</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+    margin: 0 2px;
+}
+
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 0;
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.modal-body {
+    padding: 20px 24px;
+}
+
+.modal-body p {
+    margin: 10px 0;
+}
+
+.text-danger {
+    color: #dc2626;
+    font-weight: 500;
+}
+
+.modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.badge {
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.badge.blue {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
+.badge.purple {
+    background-color: #e9d5ff;
+    color: #6b21a8;
+}
+
+.badge.orange {
+    background-color: #fef3c7;
+    color: #d97706;
+}
+
+.badge.gray {
+    background-color: #f3f4f6;
+    color: #4b5563;
+}
+
+.badge.green {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+</style>
+
+<script>
+function confirmDelete(userId, username) {
+    document.getElementById('deleteUsername').textContent = username;
+    document.getElementById('deleteForm').action = "{{ path('controller_user_delete', {id: 'USER_ID'}) }}".replace('USER_ID', userId);
+    document.getElementById('deleteModal').style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('deleteModal').style.display = 'none';
+}
+
+// Fermer le modal en cliquant en dehors
+window.onclick = function(event) {
+    const modal = document.getElementById('deleteModal');
+    if (event.target === modal) {
+        closeModal();
+    }
+}
+</script>
+{% endblock %}

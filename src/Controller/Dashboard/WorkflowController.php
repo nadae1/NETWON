@@ -1,4 +1,5 @@
 <?php
+// src/Controller/Dashboard/WorkflowController.php
 
 namespace App\Controller\Dashboard;
 
@@ -12,7 +13,6 @@ use App\Form\TaskCompletionType;
 use App\Form\TicketCommentType;
 use App\Form\TicketType;
 use App\Repository\ProcessedSiteRepository;
-use App\Repository\SiteRepository;
 use App\Repository\TicketRepository;
 use App\Repository\TicketTaskRepository;
 use App\Repository\UserRepository;
@@ -36,7 +36,6 @@ class WorkflowController extends AbstractController
 
         $user = $this->getUser();
 
-        // Rediriger les utilisateurs normaux vers leur tableau de bord dédié
         if (!$this->isGranted('ROLE_ADMIN') && !$this->isGranted('ROLE_SUPERUSER')) {
             return $this->redirectToRoute('user_tasks_dashboard');
         }
@@ -49,7 +48,6 @@ class WorkflowController extends AbstractController
             return $this->redirectToRoute('superuser_workflow_index');
         }
 
-        // Fallback (ne devrait pas arriver)
         return $this->redirectToRoute('user_tasks_dashboard');
     }
 
@@ -61,7 +59,6 @@ class WorkflowController extends AbstractController
         WorkflowEngineService $engine,
         ProcessedSiteRepository $processedSiteRepository
     ): Response {
-        // Seul le superuser peut créer un workflow (ou admin, mais on restreint)
         $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
 
         $ticket = new Ticket();
@@ -70,7 +67,6 @@ class WorkflowController extends AbstractController
 
         $currentUser = $this->getUser();
 
-        // Superuser voit tous les sites
         $availableSites = $processedSiteRepository->findLatestSites(null, 2000);
 
         $allUsers = $em->getRepository(User::class)
@@ -110,9 +106,14 @@ class WorkflowController extends AbstractController
 
             $em->persist($ticket);
 
+            $selectedProcessedSites = [];
             foreach ($selectedSiteIds as $siteId) {
                 $processedSite = $processedSiteRepository->find((int) $siteId);
-                if (!$processedSite) continue;
+                if (!$processedSite) {
+                    continue;
+                }
+
+                $selectedProcessedSites[] = $processedSite;
 
                 $ticketSite = new TicketSite();
                 $ticketSite->setTicket($ticket);
@@ -124,9 +125,17 @@ class WorkflowController extends AbstractController
 
             foreach ($selectedUserIds as $userId) {
                 $assignedUser = $em->getRepository(User::class)->find((int) $userId);
-                if ($assignedUser) {
-                    $engine->createInitialIpTask($ticket, $assignedUser);
+                if (!$assignedUser) {
+                    continue;
                 }
+
+                $userService = strtoupper($assignedUser->getService() ?? '');
+                $userSites = array_values(array_filter(
+                    $selectedProcessedSites,
+                    fn(ProcessedSite $site): bool => strtoupper($site->getService() ?? '') === $userService
+                ));
+
+                $engine->createInitialIpTask($ticket, $assignedUser, $userSites);
             }
 
             $ticketWorkflowService->refreshTicketProgress($ticket);
@@ -160,7 +169,6 @@ class WorkflowController extends AbstractController
     ): Response {
         $this->denyAccessUnlessGranted('ROLE_USER');
 
-        // Seuls admin/superuser peuvent voir cette page
         if (!$this->isGranted('ROLE_ADMIN') && !$this->isGranted('ROLE_SUPERUSER')) {
             return $this->redirectToRoute('user_tasks_dashboard');
         }
@@ -263,18 +271,20 @@ class WorkflowController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
-        $form = $this->createForm(TaskCompletionType::class);
+        $form = $this->createForm(TaskCompletionType::class, $task);
         $form->handleRequest($request);
 
         if ($form->isSubmitted() && $form->isValid()) {
-            $data = $form->getData();
-            $file = $form->get('proofFile')->getData();
+            // 🔥 CORRECTION : récupération sécurisée des champs du formulaire
+            $comment = $form->has('comment') ? $form->get('comment')->getData() : null;
+            $decision = $form->has('decision') ? $form->get('decision')->getData() : null;
+            $file = $form->has('proofFile') ? $form->get('proofFile')->getData() : null;
 
-            if (!empty($data['comment'])) {
-                $task->setComment($data['comment']);
+            if ($comment !== null) {
+                $task->setComment($comment);
             }
-            if (!empty($data['decision'])) {
-                $task->setDecision($data['decision']);
+            if ($decision !== null) {
+                $task->setDecision($decision);
             }
             if ($file) {
                 $filename = uniqid('task_proof_', true) . '.' . $file->guessExtension();
@@ -286,8 +296,8 @@ class WorkflowController extends AbstractController
                 }
             }
 
-            $decision = method_exists($task, 'getDecision') && $task->getDecision() ? $task->getDecision() : 'ok';
-            $engine->completeTaskAndMoveNext($task, $user, $decision);
+            $decisionFinal = $task->getDecision() ?: 'ok';
+            $engine->completeTask($task, $user, $decisionFinal, $task->getComment(), $task->getProofFile());
             $em->flush();
 
             $this->addFlash('success', 'Tâche traitée avec succès.');

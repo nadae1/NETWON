@@ -1,0 +1,234 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<style>
+.stats-monthly {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 24px;
+    border: 1px solid #e2e8f0;
+}
+.month-nav {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+.month-nav a {
+    color: #3b82f6;
+    font-weight: 600;
+    text-decoration: none;
+    font-size: 18px;
+}
+.month-nav span {
+    font-weight: 700;
+    font-size: 18px;
+    min-width: 120px;
+}
+.btn-export-pdf {
+    background: #ef4444;
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    text-decoration: none;
+    margin-left: auto;
+    border: none;
+    cursor: pointer;
+}
+.btn-export-pdf:hover {
+    background: #dc2626;
+    color: #fff;
+    text-decoration: none;
+}
+.stats-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+}
+.stat-card {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 12px 16px;
+    text-align: center;
+}
+.stat-number {
+    font-size: 28px;
+    font-weight: 800;
+    color: #0f172a;
+    display: block;
+}
+.stat-label {
+    font-size: 12px;
+    color: #64748b;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+.workflow-table-wrap {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    overflow-x: auto;
+    padding: 16px;
+}
+.workflow-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+.workflow-table th {
+    background: #f1f5f9;
+    text-align: left;
+    padding: 12px 10px;
+    font-weight: 700;
+    color: #1e293b;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+}
+.workflow-table td {
+    padding: 10px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+}
+.workflow-table tr:hover td {
+    background: #f8fafc;
+}
+.workflow-table .site-list {
+    font-size: 12px;
+    color: #475569;
+    max-width: 200px;
+}
+.workflow-table .site-list span {
+    display: inline-block;
+    background: #e2e8f0;
+    border-radius: 12px;
+    padding: 0 6px;
+    margin: 1px 2px;
+    font-size: 11px;
+}
+.badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+}
+.badge-open { background: #dbeafe; color: #2563eb; }
+.badge-in_progress { background: #fef3c7; color: #d97706; }
+.badge-blocked { background: #fee2e2; color: #dc2626; }
+.badge-completed { background: #dcfce7; color: #16a34a; }
+.badge-closed { background: #e2e8f0; color: #475569; }
+.filters-bar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    background: #f8fafc;
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    align-items: end;
+}
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.filter-group label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+}
+.filter-group select {
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    min-width: 160px;
+}
+@media (max-width: 768px) {
+    .stats-cards { grid-template-columns: 1fr 1fr; }
+    .month-nav { flex-direction: column; align-items: stretch; }
+    .btn-export-pdf { margin-left: 0; }
+}
+</style>
+
+<div class="workflow-page">
+    <div class="page-header">
+        <h2>Statistiques Workflows</h2>
+    </div>
+
+    <div class="stats-monthly">
+        <div class="month-nav">
+            <a href="{{ path(app.request.attributes.get('_route'), {month: currentMonth-1 < 1 ? 12 : currentMonth-1, year: currentMonth-1 < 1 ? currentYear-1 : currentYear}) }}">◀</a>
+            <span>{{ monthLabel }}</span>
+            <a href="{{ path(app.request.attributes.get('_route'), {month: currentMonth+1 > 12 ? 1 : currentMonth+1, year: currentMonth+1 > 12 ? currentYear+1 : currentYear}) }}">▶</a>
+            {# ✅ Correction du nom de route pour l'export PDF #}
+            {% set exportRoute = app.request.attributes.get('_route') starts with 'admin_' ? 'admin_workflow_stats_pdf' : 'superuser_workflow_stats_pdf' %}
+            <a href="{{ path(exportRoute, {month: currentMonth, year: currentYear}) }}" target="_blank" class="btn-export-pdf">📄 Exporter PDF</a>
+        </div>
+        <div class="stats-cards">
+            <div class="stat-card"><span class="stat-number">{{ stats.total }}</span><span class="stat-label">Total Workflows</span></div>
+            <div class="stat-card"><span class="stat-number">{{ stats.closed }}</span><span class="stat-label">Clôturés</span></div>
+            <div class="stat-card"><span class="stat-number">{{ stats.overdue }}</span><span class="stat-label">En retard</span></div>
+            <div class="stat-card"><span class="stat-number">{{ stats.sitesProcessed }}</span><span class="stat-label">Sites traités</span></div>
+        </div>
+    </div>
+
+    <div class="filters-bar">
+        <div class="filter-group">
+            <label for="monthSelect">Mois</label>
+            <select id="monthSelect" onchange="window.location.href='{{ path(app.request.attributes.get('_route')) }}?month='+this.value+'&year={{ currentYear }}'">
+                {% for m in availableMonths %}
+                    <option value="{{ m.month }}" {% if m.month == currentMonth %}selected{% endif %}>{{ m.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="yearSelect">Année</label>
+            <select id="yearSelect" onchange="window.location.href='{{ path(app.request.attributes.get('_route')) }}?month={{ currentMonth }}&year='+this.value">
+                {% for y in [currentYear-1, currentYear, currentYear+1] %}
+                    <option value="{{ y }}" {% if y == currentYear %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div class="workflow-table-wrap">
+        <table class="workflow-table">
+            <thead>
+                <tr>
+                    <th>Workflow</th>
+                    <th>Sites associés</th>
+                    <th>Action</th>
+                    <th>Users concernés</th>
+                    <th>Statut</th>
+                    <th>Sites traités</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for detail in workflowDetails %}
+                    <tr>
+                        <td><strong>{{ detail.ticket.title }}</strong><br><small>#{{ detail.ticket.id }}</small></td>
+                        <td class="site-list">
+                            {% for site in detail.sites %}
+                                <span>{{ site.siteName }}</span>
+                            {% else %}
+                                -
+                            {% endfor %}
+                        </td>
+                        <td>{{ detail.ticket.actionType ?: '-' }}</td>
+                        <td>{{ detail.users ?: '-' }}</td>
+                        <td><span class="badge badge-{{ detail.ticket.status|replace({'_': '-'}) }}">{{ detail.ticket.status|replace({'_': ' '})|title }}</span></td>
+                        <td>{{ detail.completedSites }} / {{ detail.siteCount }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="6" style="text-align:center;padding:30px;">Aucun workflow pour ce mois.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

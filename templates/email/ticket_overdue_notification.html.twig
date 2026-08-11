@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticket en retard</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f7fb;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+    <div style="max-width:720px;margin:0 auto;padding:32px 16px;">
+        <div style="background:linear-gradient(135deg,#0f172a,#1d4ed8);color:#fff;padding:28px 32px;border-radius:18px 18px 0 0;">
+            <div style="font-size:14px;letter-spacing:.08em;text-transform:uppercase;opacity:.85;">NetWON Alert</div>
+            <h1 style="margin:10px 0 0;font-size:30px;line-height:1.2;">⚠️ Ticket en retard</h1>
+            <p style="margin:10px 0 0;font-size:15px;line-height:1.6;opacity:.95;">Une intervention rapide est requise pour le ticket ci-dessous.</p>
+        </div>
+
+        <div style="background:#fff;padding:30px 32px;border-radius:0 0 18px 18px;box-shadow:0 12px 35px rgba(15,23,42,.10);">
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:24px;">
+                <div style="padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+                    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Nom du ticket</div>
+                    <div style="font-size:18px;font-weight:700;margin-top:6px;">{{ ticket.title }}</div>
+                </div>
+                <div style="padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+                    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">ID</div>
+                    <div style="font-size:18px;font-weight:700;margin-top:6px;">#{{ ticket.id }}</div>
+                </div>
+                <div style="padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+                    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Priorité</div>
+                    <div style="font-size:18px;font-weight:700;margin-top:6px;">{{ priority|upper }}</div>
+                </div>
+                <div style="padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+                    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Statut</div>
+                    <div style="font-size:18px;font-weight:700;margin-top:6px;">{{ status|upper }}</div>
+                </div>
+                <div style="padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+                    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Service</div>
+                    <div style="font-size:18px;font-weight:700;margin-top:6px;">{{ service ?: '-' }}</div>
+                </div>
+                <div style="padding:16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;">
+                    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Retard</div>
+                    <div style="font-size:18px;font-weight:700;margin-top:6px;">{{ daysOverdue }} jour(s)</div>
+                </div>
+            </div>
+
+            <div style="margin-bottom:24px;padding:18px 20px;border-left:4px solid #dc2626;background:#fef2f2;border-radius:12px;">
+                <div style="font-size:13px;color:#991b1b;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Action requise</div>
+                <div style="margin-top:8px;font-size:15px;line-height:1.7;color:#7f1d1d;">
+                    Le ticket est au-delà de sa deadline et doit être traité immédiatement afin d'éviter un impact supplémentaire sur l'exploitation.
+                </div>
+            </div>
+
+            <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+                <tr>
+                    <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;color:#64748b;width:220px;">Date de création</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;font-weight:600;">{{ createdAt ? createdAt|date('d/m/Y H:i') : '-' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;color:#64748b;">Deadline</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;font-weight:600;">{{ deadline ? deadline|date('d/m/Y H:i') : '-' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;color:#64748b;">Responsable(s)</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;font-weight:600;">{{ responsibles|join(', ') ?: '-' }}</td>
+                </tr>
+            </table>
+
+            <div style="padding:18px 20px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;color:#1d4ed8;font-size:14px;line-height:1.7;">
+                Vous recevez cet email parce que vous êtes concerné par ce ticket ou faites partie des destinataires de suivi.
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,120 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<style>
+    .validation-site-container { max-width: 900px; margin: 0 auto; padding: 0 1rem; }
+    .card { background:#fff; border-radius:.75rem; border:1px solid #e9edf4; padding:1.25rem; margin-bottom:1.25rem; box-shadow:0 1px 2px rgba(0,0,0,0.04); }
+    .section-title { font-size:.95rem; font-weight:600; color:#1e293b; margin-bottom:.8rem; }
+    .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; }
+    @media (max-width:640px) { .grid-2 { grid-template-columns:1fr; } }
+    .btn-back-rose {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: #ec4899;
+        color: #fff;
+        padding: 0.5rem 1.2rem;
+        border-radius: 40px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        border: none;
+        text-decoration: none;
+        transition: background 0.2s, transform 0.1s;
+        box-shadow: 0 4px 10px rgba(236, 72, 153, 0.25);
+        margin-bottom: 1rem;
+    }
+    .btn-back-rose:hover { background: #db2777; color: #fff; text-decoration: none; transform: translateY(-1px); }
+    .chart-container { height: 320px; margin: 1rem 0; }
+</style>
+
+<div class="validation-site-container">
+    {% if ticketId is defined and ticketId %}
+        <a href="{{ path('superuser_validation_ticket', {id: ticketId}) }}" class="btn-back-rose">← Retour à la validation</a>
+    {% else %}
+        <a href="{{ path('superuser_workflow_index') }}" class="btn-back-rose">← Retour au tableau de bord</a>
+    {% endif %}
+
+    <h1 class="text-2xl font-bold mb-2">📊 KPI Trafic - {{ site.siteName }}</h1>
+    <p class="text-sm text-gray-500 mb-4">Capacité actuelle : {{ site.capaciteMbps|default('Non définie') }} Mbps</p>
+
+    <div class="card">
+        <h2 class="section-title">📈 Trafic avant / après intervention</h2>
+        <div class="chart-container">
+            <canvas id="kpiChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 class="section-title">📋 Résumé</h2>
+        <div class="grid-2">
+            <div>
+                <p><span class="text-sm text-gray-500">Trafic max avant :</span> <strong>{{ maxBefore|round(2) }} Mbps</strong></p>
+                <p><span class="text-sm text-gray-500">Trafic max après :</span> <strong>{{ maxAfter|round(2) }} Mbps</strong></p>
+            </div>
+            <div>
+                <p><span class="text-sm text-gray-500">Réduction max :</span> <strong>{{ reduction|round(2) }} Mbps</strong></p>
+                <p><span class="text-sm text-gray-500">Taux d'amélioration :</span> <strong>{{ improvement }}%</strong></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('kpiChart').getContext('2d');
+
+    const hours = {{ hours|json_encode|raw }};
+    const trafficBefore = {{ trafficBefore|json_encode|raw }};
+    const trafficAfter = {{ trafficAfter|json_encode|raw }};
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: hours.map(h => h + 'h'),
+            datasets: [
+                {
+                    label: 'Avant intervention',
+                    data: trafficBefore,
+                    borderColor: 'rgb(239, 68, 68)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                },
+                {
+                    label: 'Après intervention',
+                    data: trafficAfter,
+                    borderColor: 'rgb(34, 197, 94)',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.parsed.y.toFixed(2) + ' Mbps';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Trafic (Mbps)' }
+                },
+                x: {
+                    title: { display: true, text: 'Heure' }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

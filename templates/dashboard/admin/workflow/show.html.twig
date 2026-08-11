@@ -10,55 +10,62 @@
 .btn-green { background:#22c55e; color:white; }
 .btn-red { background:#ef4444; color:white; }
 .btn-blue { background:#3b82f6; color:white; }
-textarea { width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; margin-bottom:12px; }
 .history-item { border-left:4px solid #3b82f6; padding-left:12px; margin-bottom:16px; }
 </style>
 
-<h2>Ticket {{ ticket.reference }}</h2>
+<h2>Ticket #{{ ticket.reference ?: ticket.id }} - {{ ticket.title }}</h2>
 
 <div class="ticket-layout">
     <div>
         <div class="card">
             <h3>Informations ticket</h3>
-            <p><strong>Site:</strong> {{ ticket.siteName }}</p>
-            <p><strong>Service:</strong> {{ ticket.service }}</p>
-            <p><strong>Étape actuelle:</strong> <span class="badge">{{ ticket.currentStep }}</span></p>
-            <p><strong>Assigné à:</strong> {{ ticket.assignedService }}</p>
-            <p><strong>Statut:</strong> {{ ticket.status }}</p>
-            <p><strong>Priorité:</strong> {{ ticket.priority }}</p>
-            <p><strong>Trafic avant:</strong> {{ ticket.trafficBefore ?: '-' }} Mbps</p>
-            <p><strong>Description:</strong><br>{{ ticket.description ?: '-' }}</p>
+            <p><strong>Référence :</strong> {{ ticket.reference ?: ticket.id }}</p>
+            <p><strong>Titre :</strong> {{ ticket.title }}</p>
+            <p><strong>Site :</strong> {{ ticket.getSiteName() ?: '-' }}</p>
+            <p><strong>Service :</strong> {{ ticket.getService() ?: '-' }}</p>
+            <p><strong>Type d'action :</strong> {{ ticket.actionType ?: '-' }}</p>
+            <p><strong>Statut :</strong> <span class="badge">{{ ticket.status }}</span></p>
+            <p><strong>Priorité :</strong> {{ ticket.priority }}</p>
+            <p><strong>Étape actuelle :</strong> {{ ticket.currentStep }}</p>
+            <p><strong>Progression :</strong> {{ ticket.progress }}%</p>
+            <p><strong>Date limite :</strong> {{ ticket.deadlineAt ? ticket.deadlineAt|date('d/m/Y H:i') : '-' }}</p>
+            <p><strong>Créé par :</strong> {{ ticket.createdBy ? ticket.createdBy.username : 'Utilisateur inconnu' }}</p>
+            <p><strong>Assigné à :</strong> {{ ticket.getAssignedService() ?: '-' }}</p>
+            <p><strong>Description :</strong><br>{{ ticket.description ?: '-' }}</p>
         </div>
 
         <div class="card">
             <h3>Historique</h3>
-            {% for h in ticket.history %}
-                <div class="history-item">
-                    <strong>{{ h.action }}</strong><br>
-                    <small>{{ h.createdAt|date('d/m/Y H:i') }}</small><br>
-                    <span>{{ h.user ? h.user.username : 'Système' }}</span>
-                    {% if h.details %}
-                        <p>{{ h.details }}</p>
-                    {% endif %}
-                </div>
+            {% if ticket.history is not empty %}
+                {% for h in ticket.history %}
+                    <div class="history-item">
+                        <strong>{{ h.action }}</strong><br>
+                        <small>{{ h.createdAt|date('d/m/Y H:i') }}</small><br>
+                        <span>{{ h.user ? h.user.username : 'Système' }}</span>
+                        {% if h.details %}
+                            <p>{{ h.details }}</p>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <p>Aucun historique.</p>
+                {% endfor %}
             {% else %}
-                <p>Aucun historique.</p>
-            {% endfor %}
+                <p>Aucun historique disponible.</p>
+            {% endif %}
         </div>
     </div>
 
     <div>
         <div class="card">
-            <h3>Actions workflow</h3>
-
+            <h3>Tâches associées</h3>
             {% if ticket.tasks is empty %}
                 <p>Aucune tâche associée à ce ticket.</p>
             {% else %}
                 <div class="actions-grid">
                     {% for task in ticket.tasks %}
-                        <div class="card">
+                        <div class="card" style="margin-bottom:10px;">
                             <strong>{{ task.title }}</strong>
-                            <p>Status : {{ task.status }}</p>
+                            <p>Statut : {{ task.status }}</p>
                             <p>Service : {{ task.serviceName ?: '-' }}</p>
                             <p>Étape : {{ task.stepCode ?: '-' }}</p>
                             <p>Assigné à : {{ task.assignedTo ? task.assignedTo.username : '-' }}</p>

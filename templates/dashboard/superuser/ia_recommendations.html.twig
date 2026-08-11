@@ -31,14 +31,102 @@
 .badge-high { background: #fff1f2; color: #ef4444; }
 .badge-medium { background: #fffbeb; color: #f59e0b; }
 .badge-low { background: #ecfdf5; color: #10b981; }
-.mini-graph { width: 200px; height: 60px; margin-top: 8px; cursor: pointer; }
+.mini-graph { width: 200px; height: 60px; margin-top: 8px; cursor: pointer; border:1px solid #e2e8f0; border-radius:6px; }
 .btn-primary { background: #3b82f6; color: white; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
-.btn-secondary { background: #f1f5f9; color: #475569; padding: 6px 12px; border-radius: 6px; text-decoration: none; }
-.modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
-.modal-content { background: white; margin: 5% auto; padding: 20px; width: 80%; max-width: 900px; border-radius: 16px; }
-.close { float: right; font-size: 28px; cursor: pointer; }
-.chart-container { display: flex; gap: 20px; justify-content: space-around; margin-top: 20px; flex-wrap: wrap; }
-.chart-box { flex: 1; min-width: 300px; }
+.btn-primary:hover { background: #2563eb; }
+.btn-secondary { background: #f1f5f9; color: #475569; padding: 6px 12px; border-radius: 6px; text-decoration: none; border: none; cursor: pointer; font-weight: 600; font-size: 13px; }
+.btn-secondary:hover { background: #e2e8f0; }
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    align-items: center;
+    justify-content: center;
+}
+.modal.show { display: flex; }
+.modal-content {
+    background: white;
+    padding: 30px;
+    width: 90%;
+    max-width: 500px;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    position: relative;
+}
+.modal-content h3 { margin-top: 0; font-size: 22px; }
+.modal-content .hint { color: #64748b; font-size: 14px; margin-bottom: 20px; }
+.modal-field { margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
+.modal-field label { font-weight: 600; color: #334155; font-size: 14px; }
+.modal-field input, .modal-field select {
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 14px;
+}
+.modal-field input:focus, .modal-field select:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+.btn-outline-modal {
+    background: #f1f5f9;
+    color: #334155;
+    padding: 10px 22px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+}
+.btn-outline-modal:hover { background: #e2e8f0; }
+.btn-primary-modal {
+    background: #3b82f6;
+    color: white;
+    padding: 10px 22px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+}
+.btn-primary-modal:hover { background: #2563eb; }
+.required-star { color: #dc2626; }
+.error-message { color: #dc2626; font-size: 13px; margin-top: 4px; display: none; }
+.close-modal { position: absolute; top: 15px; right: 20px; font-size: 28px; cursor: pointer; color: #94a3b8; }
+.close-modal:hover { color: #475569; }
+.stat-chip { background: #f1f5f9; padding: 8px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; color: #334155; }
+.manual-search-bar {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+}
+.manual-search-bar input[type="text"] {
+    padding: 9px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    min-width: 280px;
+    font-size: 14px;
+}
+.manual-search-bar input[type="text"]:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+.manual-search-count { color: #1d4ed8; font-size: 13px; font-weight: 600; }
+
+/* Correction pour les graphiques dans le modal */
+#graphModal .modal-content canvas {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 200px;
+}
 </style>
 
 <div class="recommendations-page">
@@ -55,7 +143,6 @@
         <div class="stat-chip">📊 Total analysés: {{ recommendations|length }}</div>
         <div class="stat-chip">🔴 Critiques: {{ globalStats.critical ?? 0 }}</div>
         <div class="stat-chip">🟠 Haut risque: {{ globalStats.high ?? 0 }}</div>
-        <div class="stat-chip">🟡 Moyen: {{ globalStats.medium ?? 0 }}</div>
         <div class="stat-chip">🟢 Faible: {{ globalStats.low ?? 0 }}</div>
     </div>
 
@@ -66,26 +153,44 @@
             <label style="margin-left: 20px;"><input type="radio" name="selection_mode" value="manual"> Sélection manuelle</label>
         </div>
 
+        {# Recherche rapide de site en mode manuel #}
+        <div class="manual-search-bar" id="manualSearchBar">
+            <span style="font-weight:600; color:#1e3a8a;">🔍</span>
+            <input type="text" id="manualSiteSearch" placeholder="Rechercher un site par nom (ex: STE001)...">
+            <button type="button" class="btn-secondary" id="checkAllVisible">✓ Cocher les résultats visibles</button>
+            <button type="button" class="btn-secondary" id="uncheckAll">✗ Tout décocher</button>
+            <span class="manual-search-count" id="manualSearchCount"></span>
+        </div>
+
         {% for rec in recommendations %}
-            <div class="recommendation-card" data-site-index="{{ loop.index0 }}" style="border-left-color: {{ rec.borderColor }}">
+            <div class="recommendation-card" data-site-index="{{ loop.index0 }}" data-site-name="{{ rec.siteName|lower }}" style="border-left-color: {{ rec.borderColor }}">
                 <div class="recommendation-header">
                     <div>
                         <input type="checkbox" name="selected_sites[]" value="{{ rec.siteId }}" class="site-checkbox" style="margin-right: 10px;">
                         <span class="site-name">{{ rec.siteName }}</span>
                         {% if rec.pairedSiteName %}
-                            <span class="muted">(pairé: {{ rec.pairedSiteName }})</span>
+                            <span class="muted" style="color:#94a3b8; font-size:13px;">(pairé: {{ rec.pairedSiteName }})</span>
                         {% endif %}
                     </div>
                     <div>
                         <span class="badge badge-{{ rec.severity }}">{{ rec.status|replace({'_': ' '}) }}</span>
                         <span class="badge" style="background:#e2e8f0">{{ rec.service }}</span>
                         <span class="badge" style="background:#e2e8f0">{{ rec.classification }}</span>
+                        {% if rec.etatReel %}
+                            <span class="badge" style="background:#e0e7ff; color:#3730a3;" title="État réel du pipeline">{{ rec.etatReel }}</span>
+                        {% endif %}
                     </div>
                 </div>
 
                 <div style="margin-bottom: 12px;">
-                    <span>📈 Trafic: <strong>{{ rec.maxTrafic }} Mbps</strong> / {{ rec.seuilCritique }} Mbps</span>
-                    <span style="margin-left: 20px">📊 Congestion: <strong>{{ rec.congestionLevel }}%</strong></span>
+                    <span>📈 Trafic: <strong>{{ rec.maxTrafic }} Mbps</strong> / {{ rec.capaciteMbps }} Mbps</span>
+                    <span style="margin-left: 20px">📊 Taux global: <strong>{{ rec.tauxGlobal }}%</strong></span>
+                    {% if rec.tauxTdd is not null %}
+                        <span style="margin-left: 20px">TDD: {{ rec.tauxTdd }}%</span>
+                    {% endif %}
+                    {% if rec.tauxFdd is not null %}
+                        <span style="margin-left: 20px">FDD: {{ rec.tauxFdd }}%</span>
+                    {% endif %}
                     <span style="margin-left: 20px">⚠️ Occurrences: <strong>{{ rec.nombreOccurrences }}</strong></span>
                 </div>
 
@@ -95,8 +200,8 @@
 
                 <!-- Mini graphique et bouton popup -->
                 <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
-                    <canvas class="mini-graph" data-site-id="{{ rec.siteId }}" data-type="current" width="200" height="60" style="border:1px solid #eee;"></canvas>
-                    <button type="button" class="show-graphs-btn" data-site-id="{{ rec.siteId }}" data-site-name="{{ rec.siteName }}" style="background: none; border: 1px solid #3b82f6; padding: 4px 8px; border-radius: 6px; cursor: pointer;">📊 Voir avant/après</button>
+                    <canvas class="mini-graph" data-site-id="{{ rec.siteId }}" data-type="current" width="200" height="60"></canvas>
+                    <button type="button" class="show-graphs-btn" data-site-id="{{ rec.siteId }}" data-site-name="{{ rec.siteName }}" style="background: none; border: 1px solid #3b82f6; padding: 4px 8px; border-radius: 6px; cursor: pointer; color:#2563eb;">📊 Voir avant/après</button>
                 </div>
 
                 <div style="margin-top: 12px;">
@@ -125,28 +230,57 @@
 
         {% if recommendations is not empty %}
             <div style="margin-top: 30px; text-align: center;">
-            <div class="form-group" style="margin: 20px 0; text-align: center;">
-    <label>Date limite (optionnelle) :</label>
-    <input type="date" name="deadline" class="form-control" style="display: inline-block; width: auto; margin-left: 10px;">
-</div>
-                <button type="submit" class="btn-primary">✅ Valider et créer le workflow</button>
+                <button type="button" class="btn-primary" id="openWorkflowModal">✅ Valider et créer le workflow</button>
             </div>
         {% endif %}
     </form>
 </div>
 
-<!-- Modal pour afficher les graphiques avant/après -->
-<div id="graphModal" class="modal">
+<!-- Modal workflow -->
+<div id="workflowModal" class="modal">
     <div class="modal-content">
-        <span class="close">&times;</span>
+        <span class="close-modal" id="closeModal">&times;</span>
+        <h3>📋 Créer un workflow</h3>
+        <p class="hint">Renseignez les informations du workflow pour les sites sélectionnés.</p>
+
+        <div class="modal-field">
+            <label>Nom du workflow (optionnel)</label>
+            <input type="text" id="workflowName" name="workflow_name" form="actionForm" placeholder="Ex: Plan Data - Sites critiques Juillet">
+        </div>
+        <div class="modal-field">
+            <label>Date limite <span class="required-star">*</span></label>
+            <input type="date" id="workflowDeadline" name="deadline" form="actionForm">
+            <div class="error-message" id="dateError">Veuillez sélectionner une date limite.</div>
+        </div>
+        <div class="modal-field">
+            <label>Priorité <span class="required-star">*</span></label>
+            <select id="workflowPriority" name="workflow_priority" form="actionForm">
+                <option value="urgent">🚨 Urgente</option>
+                <option value="high" selected>🔴 Haute</option>
+                <option value="medium">🟠 Moyenne</option>
+                <option value="low">🟢 Basse</option>
+            </select>
+        </div>
+
+        <div class="modal-actions">
+            <button type="button" class="btn-outline-modal" id="cancelWorkflow">Annuler</button>
+            <button type="button" class="btn-primary-modal" id="confirmWorkflow">Créer le workflow</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal graphiques avant/après -->
+<div id="graphModal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width: 800px;">
+        <span class="close-modal" id="closeGraphModal">&times;</span>
         <h2>Graphiques de trafic - <span id="modalSiteName"></span></h2>
-        <div class="chart-container">
-            <div class="chart-box">
-                <h3>Situation actuelle</h3>
+        <div class="chart-container" style="display: flex; gap: 20px; justify-content: space-around; margin-top: 20px; flex-wrap: wrap;">
+            <div class="chart-box" style="flex:1; min-width:280px;">
+                <h4>Situation actuelle</h4>
                 <canvas id="currentChart" width="400" height="200"></canvas>
             </div>
-            <div class="chart-box">
-                <h3>Après action recommandée</h3>
+            <div class="chart-box" style="flex:1; min-width:280px;">
+                <h4>Après action recommandée</h4>
                 <canvas id="afterChart" width="400" height="200"></canvas>
             </div>
         </div>
@@ -164,12 +298,22 @@
         {% endfor %}
     };
 
+    // Mini graphiques
     function drawMiniGraph(canvas, data) {
+        if (!data || !data.values || data.values.length === 0) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '11px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Aucune donnée', canvas.width/2, canvas.height/2);
+            return;
+        }
         const ctx = canvas.getContext('2d');
         const width = canvas.width, height = canvas.height;
         ctx.clearRect(0, 0, width, height);
         const maxVal = Math.max(...data.values, 1);
-        const stepX = width / (data.labels.length - 1);
+        const stepX = data.values.length > 1 ? width / (data.values.length - 1) : width;
         ctx.beginPath();
         ctx.moveTo(0, height - (data.values[0] / maxVal) * height);
         for (let i = 1; i < data.values.length; i++) {
@@ -182,18 +326,144 @@
 
     document.querySelectorAll('.mini-graph[data-type="current"]').forEach(canvas => {
         const siteId = canvas.dataset.siteId;
-        if (trafficData[siteId] && trafficData[siteId].current) {
+        if (trafficData[siteId]) {
             drawMiniGraph(canvas, trafficData[siteId].current);
         }
     });
 
-    const modal = document.getElementById('graphModal');
-    const closeBtn = document.querySelector('.close');
+    // Gestion du modal workflow
+    const workflowModal = document.getElementById('workflowModal');
+    const openModalBtn = document.getElementById('openWorkflowModal');
+    const closeModalBtn = document.getElementById('closeModal');
+    const cancelBtn = document.getElementById('cancelWorkflow');
+    const confirmBtn = document.getElementById('confirmWorkflow');
+    const form = document.getElementById('actionForm');
+    const dateError = document.getElementById('dateError');
+    const allCards = document.querySelectorAll('.recommendation-card');
+    const modeRadios = document.querySelectorAll('input[name="selection_mode"]');
+    const manualSearchBar = document.getElementById('manualSearchBar');
+    const manualSiteSearch = document.getElementById('manualSiteSearch');
+    const manualSearchCount = document.getElementById('manualSearchCount');
+    const checkAllVisibleBtn = document.getElementById('checkAllVisible');
+    const uncheckAllBtn = document.getElementById('uncheckAll');
+
+    function applyFilters() {
+        const mode = document.querySelector('input[name="selection_mode"]:checked').value;
+        manualSearchBar.style.display = (mode === 'manual') ? 'flex' : 'none';
+        const searchTerm = (mode === 'manual') ? manualSiteSearch.value.trim().toLowerCase() : '';
+
+        let visibleCount = 0;
+        allCards.forEach((card, idx) => {
+            const cb = card.querySelector('.site-checkbox');
+            const siteName = card.dataset.siteName || '';
+
+            if (mode === 'top10') {
+                const show = idx < 10;
+                card.style.display = show ? 'block' : 'none';
+                if (cb) { cb.disabled = true; cb.checked = show; }
+            } else {
+                const matches = searchTerm === '' || siteName.includes(searchTerm);
+                card.style.display = matches ? 'block' : 'none';
+                if (cb) cb.disabled = false;
+                if (matches) visibleCount++;
+            }
+        });
+
+        if (mode === 'manual') {
+            manualSearchCount.textContent = searchTerm
+                ? visibleCount + ' site(s) correspondant(s)'
+                : allCards.length + ' site(s) au total';
+        }
+    }
+
+    modeRadios.forEach(radio => radio.addEventListener('change', applyFilters));
+    manualSiteSearch.addEventListener('input', applyFilters);
+
+    checkAllVisibleBtn.addEventListener('click', function() {
+        allCards.forEach(card => {
+            if (card.style.display !== 'none') {
+                const cb = card.querySelector('.site-checkbox');
+                if (cb) cb.checked = true;
+            }
+        });
+    });
+
+    uncheckAllBtn.addEventListener('click', function() {
+        allCards.forEach(card => {
+            const cb = card.querySelector('.site-checkbox');
+            if (cb) cb.checked = false;
+        });
+    });
+
+    applyFilters();
+
+    function openModal() {
+        const mode = document.querySelector('input[name="selection_mode"]:checked').value;
+        const checked = document.querySelectorAll('.site-checkbox:checked:not(:disabled)');
+        if (mode === 'manual' && checked.length === 0) {
+            alert('Veuillez sélectionner au moins un site.');
+            return;
+        }
+        workflowModal.classList.add('show');
+        dateError.style.display = 'none';
+        document.getElementById('workflowDeadline').value = '';
+    }
+
+    function closeModal() {
+        workflowModal.classList.remove('show');
+        dateError.style.display = 'none';
+    }
+
+    openModalBtn.addEventListener('click', openModal);
+    closeModalBtn.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+    workflowModal.addEventListener('click', function(e) {
+        if (e.target === workflowModal) closeModal();
+    });
+
+    confirmBtn.addEventListener('click', function() {
+        const deadlineField = document.getElementById('workflowDeadline');
+        if (!deadlineField.value) {
+            dateError.style.display = 'block';
+            deadlineField.focus();
+            return;
+        }
+        dateError.style.display = 'none';
+
+        const mode = document.querySelector('input[name="selection_mode"]:checked').value;
+        if (mode === 'top10') {
+            allCards.forEach((card, idx) => {
+                const cb = card.querySelector('.site-checkbox');
+                if (!cb) return;
+                cb.disabled = false;
+                cb.checked = idx < 10;
+            });
+        } else {
+            allCards.forEach(card => {
+                const cb = card.querySelector('.site-checkbox');
+                if (cb) cb.disabled = false;
+            });
+        }
+
+        if (document.querySelectorAll('.site-checkbox:checked:not(:disabled)').length === 0) {
+            alert('Veuillez sélectionner au moins un site avant de créer le workflow.');
+            return;
+        }
+
+        form.submit();
+    });
+
+    // Bouton "Voir avant/après"
+    const graphModal = document.getElementById('graphModal');
+    const closeGraphBtn = document.getElementById('closeGraphModal');
     let currentChart = null, afterChart = null;
 
     function showGraphs(siteId, siteName) {
         const data = trafficData[siteId];
-        if (!data) return;
+        if (!data) {
+            alert('Aucune donnée de trafic pour ce site.');
+            return;
+        }
         document.getElementById('modalSiteName').innerText = siteName;
         if (currentChart) currentChart.destroy();
         if (afterChart) afterChart.destroy();
@@ -215,70 +485,23 @@
             },
             options: { responsive: true, maintainAspectRatio: true }
         });
-        modal.style.display = 'block';
+        graphModal.style.display = 'flex';
     }
 
     document.querySelectorAll('.show-graphs-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const siteId = btn.dataset.siteId;
-            const siteName = btn.dataset.siteName;
+        btn.addEventListener('click', function(e) {
+            const siteId = this.dataset.siteId;
+            const siteName = this.dataset.siteName;
             showGraphs(siteId, siteName);
         });
     });
 
-    closeBtn.onclick = () => { modal.style.display = 'none'; };
-    window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; };
-
-    // Gestion de l'affichage Top 10 / Sélection manuelle
-    const modeRadios = document.querySelectorAll('input[name="selection_mode"]');
-    const allCards = document.querySelectorAll('.recommendation-card');
-    const checkboxes = document.querySelectorAll('.site-checkbox');
-
-    function updateVisibility() {
-        const mode = document.querySelector('input[name="selection_mode"]:checked').value;
-        const isManual = (mode === 'manual');
-        allCards.forEach((card, idx) => {
-            if (mode === 'top10') {
-                card.style.display = idx < 10 ? 'block' : 'none';
-                const cb = card.querySelector('.site-checkbox');
-                if (cb) {
-                    cb.disabled = true;
-                    cb.checked = false;
-                }
-            } else {
-                card.style.display = 'block';
-                const cb = card.querySelector('.site-checkbox');
-                if (cb) cb.disabled = false;
-            }
-        });
-    }
-
-    function updateCheckboxesEnabled() {
-        const isManual = document.querySelector('input[name="selection_mode"]:checked').value === 'manual';
-        checkboxes.forEach(cb => cb.disabled = !isManual);
-        if (!isManual) {
-            checkboxes.forEach(cb => cb.checked = false);
-        }
-    }
-
-    modeRadios.forEach(radio => radio.addEventListener('change', () => {
-        updateVisibility();
-        updateCheckboxesEnabled();
-    }));
-    updateVisibility();
-    updateCheckboxesEnabled();
-
-    document.getElementById('actionForm').addEventListener('submit', function(e) {
-        const mode = document.querySelector('input[name="selection_mode"]:checked').value;
-        if (mode === 'top10') {
-            checkboxes.forEach(cb => cb.checked = false);
-            allCards.forEach((card, idx) => {
-                if (idx < 10) {
-                    const cb = card.querySelector('.site-checkbox');
-                    if (cb) cb.checked = true;
-                }
-            });
-        }
+    closeGraphBtn.addEventListener('click', function() {
+        graphModal.style.display = 'none';
+    });
+    graphModal.addEventListener('click', function(e) {
+        if (e.target === graphModal) graphModal.style.display = 'none';
     });
 </script>
+
 {% endblock %}

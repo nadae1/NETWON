@@ -1,0 +1,558 @@
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+/* Neutralise tout comportement de grille/sidebar hérité de .dashboard-home--superuser
+   qui laissait un espace vide à gauche sur cette page (pas de sidebar ici). */
+.dashboard-home.dashboard-home--superuser {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    grid-template-columns: none !important;
+}
+
+.dashboard-home-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px;
+    width: 100%;
+    margin-bottom: 20px;
+}
+.dashboard-home-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dashboard-home-actions .btn-primary,
+.dashboard-home-actions .btn-secondary {
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: transform .1s, opacity .15s;
+}
+.dashboard-home-actions .btn-primary:hover,
+.dashboard-home-actions .btn-secondary:hover { opacity: .88; }
+.dashboard-home-actions .btn-primary:active,
+.dashboard-home-actions .btn-secondary:active { transform: scale(.97); }
+
+/* Onglets horizon */
+.service-tabs { margin-bottom: 22px; }
+
+/* Rythme d'espacement homogène entre toutes les sections */
+.stats-grid { margin-bottom: 24px; width: 100%; }
+.charts-grid { width: 100%; margin-bottom: 24px; }
+.map-section { margin-bottom: 24px; }
+.map-section:last-child { margin-bottom: 0; }
+
+.map-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 22px;
+}
+.map-header { margin-bottom: 4px; }
+.chart-title-inline { margin: 0; font-size: 15px; font-weight: 800; color: #0f172a; }
+
+/* --- Barre de filtres --- */
+.ia-filters {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 16px 0 18px;
+    padding: 14px;
+    background: linear-gradient(180deg, #fff7ed 0%, #fefaf5 100%);
+    border-radius: 12px;
+    border: 1px solid #fed7aa;
+}
+.ia-filter-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 220px;
+}
+.ia-filter-search-wrap .ia-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 13px;
+    opacity: .5;
+    pointer-events: none;
+}
+.ia-filter-input {
+    width: 100%;
+    height: 40px;
+    padding: 0 14px 0 34px;
+    border-radius: 9px;
+    border: 1.5px solid #e2e8f0;
+    background: #fff;
+    font-size: 13.5px;
+    font-weight: 500;
+    box-sizing: border-box;
+    transition: border-color .15s;
+}
+.ia-filter-input:focus {
+    outline: none;
+    border-color: #ff7900;
+}
+.ia-filter-select {
+    height: 40px;
+    padding: 0 14px;
+    border-radius: 9px;
+    border: 1.5px solid #e2e8f0;
+    background: #fff;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #334155;
+    min-width: 190px;
+    cursor: pointer;
+}
+.ia-filter-select:focus { outline: none; border-color: #ff7900; }
+.ia-filters .btn-outline {
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 16px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    background: #fff;
+    border: 1.5px solid #e2e8f0;
+    color: #64748b;
+    cursor: pointer;
+    transition: all .15s;
+}
+.ia-filters .btn-outline:hover { border-color: #cbd5e1; color: #334155; }
+
+/* --- Tableau --- */
+.ia-table-wrap {
+    overflow-x: auto;
+    max-height: 480px;
+    overflow-y: auto;
+    border: 1px solid #f1f5f9;
+    border-radius: 10px;
+}
+.ia-table { width:100%; border-collapse:collapse; font-size:13px; }
+.ia-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    text-align:left;
+    padding:11px 14px;
+    color:#64748b;
+    font-weight:700;
+    background: #f8fafc;
+    border-bottom:2px solid #e2e8f0;
+    text-transform:uppercase;
+    font-size:10.5px;
+    letter-spacing:.5px;
+    white-space:nowrap;
+}
+.ia-table td { padding:12px 14px; border-bottom:1px solid #f1f5f9; white-space:nowrap; }
+.ia-table tbody tr:hover { background:#fff7ed; }
+.ia-table a { color: #ff7900; font-weight: 700; text-decoration: none; }
+.ia-table a:hover { text-decoration: underline; }
+
+.ia-classif-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.ia-badge { display:inline-block; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+.ia-badge-green { background:#dcfce7; color:#166534; }
+.ia-badge-yellow { background:#fef3c7; color:#92400e; }
+.ia-badge-orange { background:#fed7aa; color:#9a3412; }
+.ia-badge-red { background:#fee2e2; color:#991b1b; }
+.ia-badge-priorite-urgente { background:#dc2626; color:#fff; }
+.ia-badge-priorite-haute { background:#f59e0b; color:#fff; }
+.ia-badge-priorite-moyenne { background:#3b82f6; color:#fff; }
+.ia-badge-priorite-faible { background:#94a3b8; color:#fff; }
+</style>
+
+<div class="dashboard-home dashboard-home--superuser">
+    <div class="dashboard-home-toolbar">
+        <div>
+            <h2 style="margin:0 0 4px; font-size:20px; font-weight:800; color:#0f172a;">🧠 Prédictions IA — Trafic &amp; État des sites</h2>
+            <p style="margin:0; color:#64748b; font-size:13px;">Estimation de l'évolution du trafic et détection anticipée des risques de congestion / bridage</p>
+        </div>
+        <div class="dashboard-home-actions">
+            <button type="button" id="btn-train" class="btn-secondary">⚙️ Entraîner les modèles</button>
+            <button type="button" id="btn-refresh-batch" class="btn-primary" data-horizon="{{ horizon }}">🔄 Relancer les prédictions</button>
+            <a href="{{ path('superuser_ia_export_pdf', {horizon: horizon}) }}" class="btn-secondary">📥 Exporter (PDF)</a>
+        </div>
+    </div>
+
+    <div class="service-tabs">
+        <a href="{{ path('superuser_ia_dashboard', {horizon: 'h24'}) }}" class="service-tab {{ horizon == 'h24' ? 'active' : '' }}">📅 Prochain jour</a>
+        <a href="{{ path('superuser_ia_dashboard', {horizon: 'd7'}) }}" class="service-tab {{ horizon == 'd7' ? 'active' : '' }}">📆 7 jours</a>
+        <a href="{{ path('superuser_ia_dashboard', {horizon: 'd30'}) }}" class="service-tab {{ horizon == 'd30' ? 'active' : '' }}">🗓️ 30 jours</a>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card stat-blue with-top-accent">
+            <div>
+                <div class="stat-label">Sites suivis</div>
+                <div class="stat-value">{{ total_sites }}</div>
+                <div class="stat-small">Taux moyen projeté : {{ avg_taux }}%</div>
+            </div>
+            <div class="stat-icon icon-blue">📡</div>
+        </div>
+
+        <div class="stat-card stat-green with-top-accent">
+            <div>
+                <div class="stat-label">Sites OK</div>
+                <div class="stat-value">{{ count_ok }}</div>
+                <div class="stat-small">Aucune anomalie prévue</div>
+            </div>
+            <div class="stat-icon icon-green">✅</div>
+        </div>
+
+        <div class="stat-card stat-orange with-top-accent">
+            <div>
+                <div class="stat-label">Risque / Bridage</div>
+                <div class="stat-value">{{ count_risque + count_bridage }}</div>
+                <div class="stat-small">{{ count_risque }} risque • {{ count_bridage }} bridage</div>
+            </div>
+            <div class="stat-icon icon-orange">🟠</div>
+        </div>
+
+        <div class="stat-card stat-red with-top-accent">
+            <div>
+                <div class="stat-label">Congestion prévue</div>
+                <div class="stat-value">{{ count_congestion }}</div>
+                <div class="stat-small">Action urgente requise</div>
+            </div>
+            <div class="stat-icon icon-red">🔴</div>
+        </div>
+    </div>
+
+    {% if total_sites == 0 %}
+    <div class="map-section">
+        <div class="map-card" style="text-align:center; padding:40px;">
+            <p style="color:#94a3b8; font-size:14px; margin:0;">
+                Aucune prédiction disponible pour cet horizon.
+                Cliquez sur <strong>« Relancer les prédictions »</strong> pour lancer un calcul
+                (nécessite que les modèles soient entraînés au préalable).
+            </p>
+        </div>
+    </div>
+    {% else %}
+    <div class="charts-grid">
+        <div class="chart-card">
+            <div class="chart-title">Répartition des états prédits</div>
+            <div class="chart-box">
+                <canvas id="chartEtat"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">Actions recommandées</div>
+            <div class="chart-box">
+                <canvas id="chartAction"></canvas>
+            </div>
+            <div class="legend">
+                <div class="legend-item"><span class="legend-dot dot-red"></span> Urgente</div>
+                <div class="legend-item"><span class="legend-dot dot-yellow"></span> Haute</div>
+                <div class="legend-item"><span class="legend-dot dot-blue"></span> Moyenne</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="map-section">
+        <div class="map-card">
+            <div class="map-header">
+                <h3 class="chart-title-inline">🔥 Top 10 sites les plus critiques</h3>
+            </div>
+            <div class="ia-table-wrap" style="max-height:none; margin-top:14px;">
+                <table class="ia-table">
+                    <thead>
+                        <tr>
+                            <th>Site</th>
+                            <th>Trafic actuel</th>
+                            <th>Trafic projeté</th>
+                            <th>Taux projeté</th>
+                            <th>État prédit</th>
+                            <th>Priorité</th>
+                            <th>Action</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in top_critiques %}
+                        <tr>
+                            <td><strong>{{ p.site }}</strong></td>
+                            <td>{{ p.traficActuelMbps|number_format(1) }} Mbps</td>
+                            <td>{{ p.traficProjeteMbps|number_format(1) }} Mbps</td>
+                            <td>{{ p.tauxUtilisationProjetePct|number_format(1) }} %</td>
+                            <td>
+                                <span class="ia-badge {{ p.etatPredit starts with 'CONGESTION' ? 'ia-badge-red' : (p.etatPredit == 'BRIDAGE' ? 'ia-badge-orange' : (p.etatPredit == 'RISQUE_DE_CONGESTION' ? 'ia-badge-yellow' : 'ia-badge-green')) }}">
+                                    {{ p.etatPredit }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="ia-badge ia-badge-priorite-{{ p.actionPriorite|lower }}">{{ p.actionPriorite }}</span>
+                            </td>
+                            <td>{{ p.actionCode }}</td>
+                            <td><a href="{{ path('superuser_ia_site_detail', {site: p.site, horizon: horizon}) }}" class="btn-secondary" style="padding:6px 12px; font-size:12px; height:auto;">Détail →</a></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="8" style="text-align:center; color:#94a3b8; padding:30px;">Aucune prédiction critique pour cet horizon.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="map-section">
+        <div class="map-card">
+            <div class="map-header">
+                <h3 class="chart-title-inline">📋 Toutes les prédictions (<span id="filteredCount">{{ predictions|length }}</span> / {{ predictions|length }} sites)</h3>
+            </div>
+
+            <div class="ia-filters">
+                <div class="ia-filter-search-wrap">
+                    <span class="ia-search-icon">🔍</span>
+                    <input type="text" id="filterSiteName" placeholder="Rechercher un site..." class="ia-filter-input">
+                </div>
+
+                <select id="filterClassification" class="ia-filter-select">
+                    <option value="">Toutes les classifications</option>
+                    {% for c in unique_classifications %}
+                        <option value="{{ c }}">{{ c }}</option>
+                    {% endfor %}
+                </select>
+
+                <select id="filterEtat" class="ia-filter-select">
+                    <option value="">Tous les états</option>
+                    {% for e in unique_etats %}
+                        <option value="{{ e }}">{{ e }}</option>
+                    {% endfor %}
+                </select>
+
+                <button type="button" id="filterReset" class="btn-outline">✕ Réinitialiser</button>
+            </div>
+
+            <div class="ia-table-wrap">
+                <table class="ia-table" id="predictionsTable">
+                    <thead>
+                        <tr>
+                            <th>Site</th>
+                            <th>Classification</th>
+                            <th>Trafic actuel</th>
+                            <th>Trafic projeté</th>
+                            <th>Croissance</th>
+                            <th>Taux projeté</th>
+                            <th>État</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in predictions %}
+                        {% set classif = classifications_map[p.site]|default('-') %}
+                        <tr class="prediction-row" data-site="{{ p.site|lower }}" data-classification="{{ classif }}" data-etat="{{ p.etatPredit }}">
+                            <td><strong>{{ p.site }}</strong></td>
+                            <td><span class="ia-classif-badge">{{ classif }}</span></td>
+                            <td>{{ p.traficActuelMbps|number_format(1) }}</td>
+                            <td>{{ p.traficProjeteMbps|number_format(1) }}</td>
+                            <td>{{ (p.facteurCroissance * 100 - 100)|number_format(1) }} %</td>
+                            <td>{{ p.tauxUtilisationProjetePct|number_format(1) }} %</td>
+                            <td>
+                                <span class="ia-badge {{ p.etatPredit starts with 'CONGESTION' ? 'ia-badge-red' : (p.etatPredit == 'BRIDAGE' ? 'ia-badge-orange' : (p.etatPredit == 'RISQUE_DE_CONGESTION' ? 'ia-badge-yellow' : 'ia-badge-green')) }}">
+                                    {{ p.etatPredit }}
+                                </span>
+                            </td>
+                            <td><a href="{{ path('superuser_ia_site_detail', {site: p.site, horizon: horizon}) }}">Détail →</a></td>
+                        </tr>
+                        {% endfor %}
+                        <tr id="noResultsRow" style="display:none;">
+                            <td colspan="8" style="text-align:center; color:#94a3b8; padding:30px;">Aucun site ne correspond à ces filtres.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const etatStats = {{ etat_stats|json_encode|raw }};
+    const actionStats = {{ action_stats|json_encode|raw }};
+
+    const etatColors = {
+        'OK': '#10b981',
+        'RISQUE_DE_CONGESTION': '#f59e0b',
+        'BRIDAGE': '#fb923c',
+        'CONGESTION': '#ef4444',
+        'CONGESTION(FDD)': '#dc2626',
+        'CONGESTION(TDD)': '#b91c1c',
+    };
+
+    const chartEtatEl = document.getElementById('chartEtat');
+    if (chartEtatEl && etatStats.length > 0) {
+        new Chart(chartEtatEl, {
+            type: 'doughnut',
+            data: {
+                labels: etatStats.map(e => e.etat || 'Inconnu'),
+                datasets: [{
+                    data: etatStats.map(e => e.total),
+                    backgroundColor: etatStats.map(e => etatColors[e.etat] || '#94a3b8'),
+                    borderWidth: 4,
+                    hoverOffset: 8,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '55%',
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } }
+            }
+        });
+    }
+
+    const chartActionEl = document.getElementById('chartAction');
+    if (chartActionEl && actionStats.length > 0) {
+        new Chart(chartActionEl, {
+            type: 'bar',
+            data: {
+                labels: actionStats.map(a => a.action || 'Aucune'),
+                datasets: [{
+                    label: 'Nombre de sites',
+                    data: actionStats.map(a => a.total),
+                    backgroundColor: '#FF7900',
+                    borderRadius: 6,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
+            }
+        });
+    }
+
+    const btnBatch = document.getElementById('btn-refresh-batch');
+    if (btnBatch) {
+        btnBatch.addEventListener('click', async function () {
+            const btn = this;
+            const horizon = btn.dataset.horizon;
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = '⏳ Calcul en cours...';
+            try {
+                const formData = new FormData();
+                formData.append('horizon', horizon);
+                const res = await fetch("{{ path('superuser_ia_predict_batch') }}", {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin'
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    location.reload();
+                } else {
+                    alert('Erreur : ' + (data.message || 'inconnue'));
+                    btn.disabled = false;
+                    btn.textContent = original;
+                }
+            } catch (e) {
+                alert('Erreur réseau : ' + e.message);
+                btn.disabled = false;
+                btn.textContent = original;
+            }
+        });
+    }
+
+    const btnTrain = document.getElementById('btn-train');
+    if (btnTrain) {
+        btnTrain.addEventListener('click', async function () {
+            const btn = this;
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = '⏳ Entraînement...';
+            try {
+                const res = await fetch("{{ path('superuser_ia_train') }}", {
+                    method: 'POST',
+                    credentials: 'same-origin'
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    alert('Modèles entraînés avec succès.');
+                } else {
+                    alert('Erreur : ' + (data.message || 'inconnue'));
+                }
+            } catch (e) {
+                alert('Erreur réseau : ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = original;
+            }
+        });
+    }
+
+    // --- Filtres client-side sur le tableau complet des prédictions ---
+    const filterSiteName = document.getElementById('filterSiteName');
+    const filterClassification = document.getElementById('filterClassification');
+    const filterEtat = document.getElementById('filterEtat');
+    const filterReset = document.getElementById('filterReset');
+    const predictionsTable = document.getElementById('predictionsTable');
+    const filteredCountEl = document.getElementById('filteredCount');
+    const noResultsRow = document.getElementById('noResultsRow');
+
+    if (predictionsTable) {
+        const rows = Array.from(predictionsTable.querySelectorAll('.prediction-row'));
+
+        function applyFilters() {
+            const nameQuery = filterSiteName.value.trim().toLowerCase();
+            const classifQuery = filterClassification.value;
+            const etatQuery = filterEtat.value;
+
+            let visibleCount = 0;
+            rows.forEach(row => {
+                const matchesName = !nameQuery || row.dataset.site.includes(nameQuery);
+                const matchesClassif = !classifQuery || row.dataset.classification === classifQuery;
+                const matchesEtat = !etatQuery || row.dataset.etat === etatQuery;
+                const visible = matchesName && matchesClassif && matchesEtat;
+                row.style.display = visible ? '' : 'none';
+                if (visible) visibleCount++;
+            });
+
+            filteredCountEl.textContent = visibleCount;
+            noResultsRow.style.display = visibleCount === 0 ? '' : 'none';
+        }
+
+        filterSiteName.addEventListener('input', applyFilters);
+        filterClassification.addEventListener('change', applyFilters);
+        filterEtat.addEventListener('change', applyFilters);
+        filterReset.addEventListener('click', function () {
+            filterSiteName.value = '';
+            filterClassification.value = '';
+            filterEtat.value = '';
+            applyFilters();
+        });
+    }
+});
+</script>
+{% endblock %}
