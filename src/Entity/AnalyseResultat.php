@@ -66,6 +66,16 @@ class AnalyseResultat
     #[ORM\Column(length: 64, nullable: true)]
     private ?string $dataHash = null;
 
+    /**
+     * ✅ NOUVEAU : durée max (s) d'indisponibilité S1 et date de la
+     * dernière coupure détectée pour ce site sur l'analyse courante.
+     */
+    #[ORM\Column(name: 's1_fail_duration', type: 'decimal', precision: 15, scale: 4, nullable: true)]
+    private ?float $s1FailDuration = null;
+
+    #[ORM\Column(name: 's1_fail_date', type: 'datetime', nullable: true)]
+    private ?\DateTimeInterface $s1FailDate = null;
+
     public function getId(): ?int { return $this->id; }
 
     public function getSite(): ?string { return $this->site; }
@@ -118,4 +128,10 @@ class AnalyseResultat
 
     public function getDataHash(): ?string { return $this->dataHash; }
     public function setDataHash(?string $dataHash): self { $this->dataHash = $dataHash; return $this; }
+
+    public function getS1FailDuration(): ?float { return $this->s1FailDuration; }
+    public function setS1FailDuration(?float $s1FailDuration): self { $this->s1FailDuration = $s1FailDuration; return $this; }
+
+    public function getS1FailDate(): ?\DateTimeInterface { return $this->s1FailDate; }
+    public function setS1FailDate(?\DateTimeInterface $s1FailDate): self { $this->s1FailDate = $s1FailDate; return $this; }
 }

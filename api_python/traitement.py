@@ -1,4 +1,5 @@
-# api_python/traitement.py — VERSION FINALE UNIFIÉE (corrigée)
+# api_python/traitement.py — VERSION FINALE UNIFIÉE
+# S1 extrait et affiché, mais SANS impact sur le statut (site_status) ni l'état (status)
 import pandas as pd
 import io
 import re
@@ -43,14 +44,6 @@ def normaliser_type_trans(valeur: str) -> str:
     return str(valeur).strip()
 
 def extraire_prefixe(site: str) -> str:
-    """
-    ✅ CORRIGÉ : normalisation systématique en MAJUSCULES dès l'entrée.
-    Cette fonction est le point de passage unique pour dériver un préfixe
-    à partir d'un nom de site brut ; en garantissant qu'elle renvoie
-    toujours de la casse identique (majuscules) quelle que soit la casse
-    d'entrée, on aligne cette clé sur celle produite par capacite.py et
-    dropcong.py (qui normalisent déjà systématiquement en majuscules).
-    """
     if not site or (isinstance(site, float) and pd.isna(site)):
         return ''
     s = str(site).strip().upper()
@@ -94,6 +87,19 @@ def max_dropcong(df: pd.DataFrame) -> int:
     except Exception:
         return 0
 
+def calculer_s1_fail(df: pd.DataFrame):
+    if df is None or df.empty or 'S1FailDur' not in df.columns:
+        return 0.0, None
+    non_zero = df[df['S1FailDur'] > 0]
+    if non_zero.empty:
+        return 0.0, None
+    idx_max = non_zero['S1FailDur'].idxmax()
+    max_val = float(non_zero.loc[idx_max, 'S1FailDur'])
+    date_max = non_zero.loc[idx_max, 'DateTime']
+    if hasattr(date_max, 'strftime'):
+        date_max = date_max.strftime('%Y-%m-%d %H:%M:%S')
+    return max_val, date_max
+
 def calculer_nombre_occurrences(df: pd.DataFrame) -> int:
     if df is None or df.empty or 'MaxSpeed' not in df.columns:
         return 0
@@ -123,13 +129,6 @@ def get_type_trans_for_prefix(prefix, type_dict, capacite_dict=None):
 # ========== CAPACITÉS ==========
 
 def resolve_capacites_tdd_fdd(classification, site_tf, site_tdd, site_fdd, site_simple, prefix, capacites_from_ports):
-    """
-    Retourne (cap_tdd, cap_fdd) séparément. Un site peut n'avoir de capacité
-    déclarée que sur le port qui porte réellement du trafic (l'autre reste
-    à 0), ou sur les deux ports simultanément. Ces deux valeurs restent
-    distinctes ici — c'est effective_capacity_for_utilization() qui décide
-    ensuite comment les combiner en une capacité "globale" pour l'affichage.
-    """
     cap_tdd = 0.0
     cap_fdd = 0.0
     classification = (classification or '').upper().strip()
@@ -158,20 +157,7 @@ def resolve_capacites_tdd_fdd(classification, site_tf, site_tdd, site_fdd, site_
 
     return cap_tdd, cap_fdd
 
-
 def effective_capacity_for_utilization(classification, cap_tdd, cap_fdd, fallback=0.0):
-    """
-    Capacité "globale" utilisée pour l'affichage (Capacite_Mbps) et pour
-    le taux d'utilisation global d'un site.
-
-    Quand un site a une capacité déclarée sur les deux ports (TDD et FDD)
-    — ce qui arrive pour COTRANS/NO_COTRANS — la capacité globale est le
-    MAX des deux, pas la somme. Les deux ports ne s'additionnent pas en
-    bande passante cumulée du point de vue de la capacité déclarée ; seul
-    le trafic combiné réel (mesuré) peut légitimement dépasser la capacité
-    d'un seul port, ce qui est normal et voulu (le taux peut alors dépasser
-    100% pour signaler une vraie saturation).
-    """
     classification = (classification or '').upper().strip()
     cap_tdd = float(cap_tdd or 0)
     cap_fdd = float(cap_fdd or 0)
@@ -183,15 +169,8 @@ def effective_capacity_for_utilization(classification, cap_tdd, cap_fdd, fallbac
     total = max(cap_tdd, cap_fdd)
     return total if total > 0 else fallback
 
-
 def calculer_taux_utilisation_complet(max_trafic, max_tdd, max_fdd, capacite_tdd, capacite_fdd,
                                        classification, capacite_globale=0):
-    """
-    Le taux d'utilisation global (hors TF/ONLY_FDD/FDD/-, donc pour
-    COTRANS/NO_COTRANS où les deux ports peuvent coexister) divise le
-    trafic max par MAX(capacite_tdd, capacite_fdd), pas par leur somme —
-    cohérent avec effective_capacity_for_utilization().
-    """
     classification = (classification or '').upper().strip()
     capacite_tdd = float(capacite_tdd or 0)
     capacite_fdd = float(capacite_fdd or 0)
@@ -216,7 +195,6 @@ def calculer_taux_utilisation_complet(max_trafic, max_tdd, max_fdd, capacite_tdd
             taux_global = round((max_trafic / capacite_globale) * 100, 2)
 
     return {'taux_utilisation': taux_global, 'taux_utilisation_tdd': taux_tdd, 'taux_utilisation_fdd': taux_fdd}
-
 
 def _parse_import_date(value):
     if not value:
@@ -301,7 +279,6 @@ def charger_capacites_from_port_data(port_info):
             _set_latest_capacity(capacites, prefix, capa, date_import)
     return capacites
 
-
 def charger_capacites_from_capacite_site():
     try:
         conn = psycopg2.connect(**DB_CONFIG)
@@ -321,10 +298,6 @@ def charger_capacites_from_capacite_site():
 
         capacites = {}
         for site, capacity, date_import in rows:
-            # ✅ CORRIGÉ : normalisation MAJUSCULES à la lecture, défensive
-            # même si les données en base sont déjà uppercase (capacite.py
-            # les stocke déjà normalisées) -- garantit la cohérence de
-            # casse avec les clés construites côté trafic (eNodeB_Name).
             site_key = str(site).strip().upper()
             _set_latest_capacity(capacites, site_key, float(capacity or 0), date_import)
             prefix = extraire_prefixe(site_key)
@@ -335,7 +308,6 @@ def charger_capacites_from_capacite_site():
     except Exception as e:
         print(f"⚠️ capacités capacite_site : {e}")
         return {}
-
 
 def fusionner_capacites_priorite_import(port_capacity_map, imported_capacity_map):
     merged = {}
@@ -362,9 +334,6 @@ def charger_coordonnees_gps(file_content):
             return {}
         coords_dict = {}
         for _, row in df.iterrows():
-            # ✅ CORRIGÉ : normalisation MAJUSCULES pour matcher les clés
-            # (site_tf, site_tdd, site_fdd, prefix) désormais toutes
-            # uppercase dans traiter_fichiers().
             site = str(row[site_col]).strip().upper()
             if not site or site == 'NAN':
                 continue
@@ -380,7 +349,13 @@ def charger_coordonnees_gps(file_content):
         print(f"   ❌ Erreur GPS: {e}")
         return {}
 
-# ========== LECTURE TRAFIC ==========
+# ========== LECTURE TRAFIC (robuste S1) ==========
+
+def _normalize_column_name(col: str) -> str:
+    # Nettoie les noms de colonnes pour détection robuste
+    col = re.sub(r'[_.\-]', ' ', col)
+    col = re.sub(r'\s+', ' ', col).strip()
+    return col.lower()
 
 def lire_excel_trafic_directement(file_content: bytes) -> pd.DataFrame:
     df = None
@@ -395,27 +370,30 @@ def lire_excel_trafic_directement(file_content: bytes) -> pd.DataFrame:
         raise ValueError("Impossible de lire le fichier trafic")
 
     df.columns = df.columns.str.strip()
-    rename_map = {}
-    for col in df.columns:
-        cl = col.lower()
-        if 'enodeb' in cl or ('name' in cl and 'site' not in cl):
-            rename_map[col] = 'eNodeB_Name'
-        elif 'dropcong' in cl and 'downbwnum' in cl:
-            rename_map[col] = 'DropCongDownBWNum'
-        elif 'maxspeed' in cl or 'rxmaxspeed' in cl or 'mbit' in cl:
-            rename_map[col] = 'MaxSpeed'
-    df = df.rename(columns=rename_map)
+    original_cols = list(df.columns)
+    print("📋 Colonnes brutes :", original_cols)
 
-    # ✅ CORRIGÉ : normalisation MAJUSCULES du nom de site dès la lecture.
-    # C'est LA cause racine du bug "capacité et état tous faux" : capacite.py
-    # et dropcong.py normalisent déjà systématiquement en majuscules, mais
-    # traitement.py conservait la casse brute du fichier trafic. Si le
-    # fichier trafic contenait "site001_TF" (minuscules/mixte) alors que
-    # capacite_site contenait "SITE001_TF" (majuscules, imposé par
-    # capacite.py), la recherche par clé de dictionnaire Python échouait
-    # silencieusement (clé différente) -> capacité toujours à 0 -> le site
-    # était systématiquement écarté de l'analyse (is_critical=False,
-    # etat_site='NON_EVALUE'), quel que soit son vrai trafic.
+    rename_map = {}
+    for col in original_cols:
+        norm = _normalize_column_name(col)
+        # Détection S1
+        if ('s1' in norm and 'fail' in norm) or \
+           ('s1' in norm and 'unavail' in norm) or \
+           ('s1' in norm and 'dur' in norm) or \
+           ('cell.unavail' in norm and 's1' in norm) or \
+           re.search(r's1\s*\(s\)', norm):
+            rename_map[col] = 'S1FailDur'
+            print(f"✅ Colonne S1 détectée : '{col}' → S1FailDur")
+        elif 'enodeb' in norm or ('name' in norm and 'site' not in norm):
+            rename_map[col] = 'eNodeB_Name'
+        elif 'dropcong' in norm and 'downbwnum' in norm:
+            rename_map[col] = 'DropCongDownBWNum'
+        elif 'maxspeed' in norm or 'rxmaxspeed' in norm or 'mbit' in norm:
+            rename_map[col] = 'MaxSpeed'
+
+    df = df.rename(columns=rename_map)
+    print("🔁 Colonnes renommées :", list(df.columns))
+
     if 'eNodeB_Name' in df.columns:
         df['eNodeB_Name'] = df['eNodeB_Name'].astype(str).str.strip().str.upper()
 
@@ -424,7 +402,13 @@ def lire_excel_trafic_directement(file_content: bytes) -> pd.DataFrame:
     df = df.dropna(subset=['DateTime'])
 
     if 'MaxSpeed' not in df.columns:
-        df['MaxSpeed'] = df.iloc[:, -1]
+        for c in df.columns:
+            if c not in ['DateTime', 'eNodeB_Name']:
+                df['MaxSpeed'] = pd.to_numeric(df[c], errors='coerce')
+                if df['MaxSpeed'].notna().any():
+                    break
+        else:
+            df['MaxSpeed'] = 0.0
 
     df['MaxSpeed'] = pd.to_numeric(
         df['MaxSpeed'].astype(str).str.replace(',', '.', regex=False).str.replace(r'[^\d.\-]', '', regex=True),
@@ -438,6 +422,16 @@ def lire_excel_trafic_directement(file_content: bytes) -> pd.DataFrame:
             errors='coerce'
         ).fillna(0)
 
+    if 'S1FailDur' not in df.columns:
+        print("⚠️ Colonne S1FailDur NON détectée – initialisée à 0.")
+        df['S1FailDur'] = 0.0
+    else:
+        df['S1FailDur'] = pd.to_numeric(
+            df['S1FailDur'].astype(str).str.replace(',', '.', regex=False).str.replace(r'[^\d.\-]', '', regex=True),
+            errors='coerce'
+        ).fillna(0)
+        print(f"📊 S1FailDur : min={df['S1FailDur'].min()}, max={df['S1FailDur'].max()}, non_zero={df[df['S1FailDur']>0].shape[0]}")
+
     df = df.dropna(subset=['MaxSpeed'])
     df = df[df['MaxSpeed'] >= 0]
 
@@ -446,7 +440,6 @@ def lire_excel_trafic_directement(file_content: bytes) -> pd.DataFrame:
     print(f"🚫 Sites L2B supprimés : {avant - len(df)}")
     print(f"📊 Trafic chargé : {len(df)} mesures")
     return df
-
 
 def calculer_duree_jours_trafic(df_trafic: pd.DataFrame) -> int:
     if df_trafic.empty or 'DateTime' not in df_trafic.columns:
@@ -481,8 +474,6 @@ def charger_port_data_as_dict():
         cur.close(); conn.close()
         port_info = {}
         for site, port_no, trafic, date_import in rows:
-            # ✅ CORRIGÉ : normalisation MAJUSCULES à la lecture (même
-            # raisonnement que charger_capacites_from_capacite_site).
             s = str(site).strip().upper()
             if s not in port_info:
                 port_info[s] = {'port0': 0, 'port1': 0, 'date': None}
@@ -497,7 +488,6 @@ def charger_port_data_as_dict():
         print(f"⚠️ port_data : {e}")
         return {}
 
-
 def charger_type_liaison_as_dict():
     try:
         conn = psycopg2.connect(**DB_CONFIG)
@@ -507,7 +497,6 @@ def charger_type_liaison_as_dict():
         cur.close(); conn.close()
         type_dict = {}
         for site, type_trans in rows:
-            # ✅ CORRIGÉ : normalisation MAJUSCULES à la lecture.
             s = str(site).strip().upper()
             val = normaliser_type_trans(type_trans)
             if s not in type_dict:
@@ -520,7 +509,6 @@ def charger_type_liaison_as_dict():
     except Exception as e:
         print(f"⚠️ type_liaison : {e}")
         return {}
-
 
 def charger_capacite_as_dict():
     try:
@@ -540,7 +528,6 @@ def charger_capacite_as_dict():
         cur.close(); conn.close()
         capacite_dict = {}
         for site, type_trans in rows:
-            # ✅ CORRIGÉ : normalisation MAJUSCULES à la lecture.
             s = str(site).strip().upper()
             if type_trans:
                 if s not in capacite_dict:
@@ -587,10 +574,6 @@ def update_port_data(file_content: bytes):
         n = 0
         import_date = datetime.now()
         for _, row in df.iterrows():
-            # ✅ CORRIGÉ : normalisation MAJUSCULES à l'écriture, pour que
-            # port_data soit stocké dans la même casse que capacite_site
-            # (déjà normalisé par capacite.py) et que trafic_historique
-            # (désormais normalisé par lire_excel_trafic_directement).
             site = str(row[site_col]).strip().upper()
             if not site or site == 'NAN':
                 continue
@@ -609,7 +592,6 @@ def update_port_data(file_content: bytes):
         print(f"   ✅ port_data MAJ : {n}")
     except Exception as e:
         print(f"   ❌ port_data: {e}")
-
 
 def update_type_liaison_data(file_content: bytes):
     try:
@@ -634,7 +616,6 @@ def update_type_liaison_data(file_content: bytes):
             print("   ✅ Table type_liaison_data créée")
         n = 0
         for _, row in df.iterrows():
-            # ✅ CORRIGÉ : normalisation MAJUSCULES à l'écriture.
             site = str(row[col_site]).strip().upper()
             if not site or site == 'NAN':
                 continue
@@ -651,7 +632,7 @@ def update_type_liaison_data(file_content: bytes):
     except Exception as e:
         print(f"   ❌ type_liaison: {e}")
 
-# ========== TABLES D'ANALYSE (création idempotente) ==========
+# ========== TABLES D'ANALYSE ==========
 
 def _ensure_analyse_resultat_table(cur):
     cur.execute("""
@@ -687,7 +668,6 @@ def _ensure_analyse_resultat_table(cur):
     cur.execute("ALTER TABLE analyse_resultat ADD COLUMN IF NOT EXISTS service_name VARCHAR(50)")
     cur.execute("ALTER TABLE analyse_resultat ADD COLUMN IF NOT EXISTS data_hash VARCHAR(64)")
 
-
 def _ensure_site_etat_table(cur):
     cur.execute("""
         CREATE TABLE IF NOT EXISTS site_etat (
@@ -710,9 +690,10 @@ def _ensure_site_etat_table(cur):
     for col, defn in [
         ('taux_utilisation_tdd', 'NUMERIC(8,2)'),
         ('taux_utilisation_fdd', 'NUMERIC(8,2)'),
+        ('s1_fail_duration', 'NUMERIC(15,4) DEFAULT 0'),
+        ('s1_fail_date', 'TIMESTAMP WITHOUT TIME ZONE'),
     ]:
         cur.execute(f"ALTER TABLE site_etat ADD COLUMN IF NOT EXISTS {col} {defn}")
-
 
 def _ensure_site_alert_table(cur):
     cur.execute("""
@@ -736,6 +717,8 @@ def _ensure_site_alert_table(cur):
     for col, defn in [
         ('taux_utilisation_tdd', 'NUMERIC(8,2)'),
         ('taux_utilisation_fdd', 'NUMERIC(8,2)'),
+        ('s1_fail_duration', 'NUMERIC(15,4) DEFAULT 0'),
+        ('s1_fail_date', 'TIMESTAMP WITHOUT TIME ZONE'),
     ]:
         cur.execute(f"ALTER TABLE site_alert ADD COLUMN IF NOT EXISTS {col} {defn}")
 
@@ -754,6 +737,7 @@ def inserer_analyse_resultat(sites_data):
             ('capacite_mbps', 'NUMERIC(15,4) DEFAULT 0'), ('duree_jours', 'INT DEFAULT 7'),
             ('dropcong_tdd', 'INT DEFAULT 0'), ('dropcong_fdd', 'INT DEFAULT 0'), ('dropcong_tf', 'INT DEFAULT 0'),
             ('taux_utilisation', 'NUMERIC(8,2)'), ('taux_utilisation_tdd', 'NUMERIC(8,2)'), ('taux_utilisation_fdd', 'NUMERIC(8,2)'),
+            ('s1_fail_duration', 'NUMERIC(15,4) DEFAULT 0'), ('s1_fail_date', 'TIMESTAMP WITHOUT TIME ZONE'),
         ]:
             cur.execute(f"SELECT column_name FROM information_schema.columns WHERE table_name='analyse_resultat' AND column_name='{col}'")
             if not cur.fetchone():
@@ -771,8 +755,9 @@ def inserer_analyse_resultat(sites_data):
                  somme_fdd_tdd, date_analyse, latitude, longitude, duree_jours,
                  max_trafic_fdd, max_trafic_tdd, nombre_occurrences_tdd,
                  nombre_occurrences_fdd, capacite_mbps, dropcong_tdd,
-                 dropcong_fdd, dropcong_tf, taux_utilisation, taux_utilisation_tdd, taux_utilisation_fdd)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                 dropcong_fdd, dropcong_tf, taux_utilisation, taux_utilisation_tdd, taux_utilisation_fdd,
+                 s1_fail_duration, s1_fail_date)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """, (
                 to_py(site.get('Site')), to_py(site.get('Classification')), to_py(site.get('Type_Trans')),
                 to_py(site.get('Max_Trafic_Final', 0)), to_py(site.get('Seuil_Critique', 0)),
@@ -784,6 +769,7 @@ def inserer_analyse_resultat(sites_data):
                 to_py(site.get('Capacite_Mbps', 0)), to_py(site.get('DropCong_TDD', 0)), to_py(site.get('DropCong_FDD', 0)),
                 to_py(site.get('DropCong_TF', 0)), to_py(site.get('taux_utilisation')),
                 to_py(site.get('taux_utilisation_tdd')), to_py(site.get('taux_utilisation_fdd')),
+                to_py(site.get('S1_Fail_Duration', 0)), to_py(site.get('S1_Fail_Date')),
             ))
             count += 1
         conn.commit()
@@ -831,14 +817,7 @@ def _ensure_trafic_historique_table(cur):
 
     cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_trafic_historique_site_heure ON trafic_historique (site, date_heure)")
 
-
 def inserer_trafic_historique_brut(df_trafic: pd.DataFrame) -> int:
-    """
-    Insère les mesures brutes PAR SITE (donc par port, TDD et FDD restent
-    des lignes distinctes puisque eNodeB_Name diffère selon le suffixe) —
-    ceci permet ensuite de reconstituer trafic TDD seul, FDD seul, ou les
-    deux simultanément, sans perte d'information.
-    """
     try:
         if df_trafic.empty:
             return 0
@@ -897,7 +876,7 @@ def inserer_trafic_historique_brut(df_trafic: pd.DataFrame) -> int:
         traceback.print_exc()
         return 0
 
-# ========== ÉTATS ET ALERTES ==========
+# ========== ÉTATS ET ALERTES (S1 sans impact) ==========
 
 def variation_pct(a, b):
     if a <= 0:
@@ -910,7 +889,10 @@ def type_trans_manquant(type_trans):
     valeur = str(type_trans).strip().upper()
     return valeur in ('', 'NON_DEFINI', 'NONE', 'N/A', 'NA', '-')
 
-def construire_message_alerte(etat, nom, trafic_j, capacite, taux, type_trans):
+def construire_message_alerte(etat, nom, trafic_j, capacite, taux, type_trans, s1_fail_dur=0, s1_fail_date=None):
+    if etat == 'COUPURE_S1':
+        detail_date = f" (derniere detection : {s1_fail_date})" if s1_fail_date else ""
+        return f"⛔ COUPURE S1 - {nom}: indisponibilite du lien S1 de {s1_fail_dur:.0f}s detectee{detail_date} - aucun trafic ne transite entre le site et l'eNodeB"
     if etat == 'SANS_TYPE':
         detail = f'type de liaison manquant ({str(type_trans).strip()})' if type_trans and str(type_trans).strip() else 'type de liaison non defini'
         return f"⚪ SITE SANS TYPE - {nom}: {detail}"
@@ -926,9 +908,9 @@ def construire_message_alerte(etat, nom, trafic_j, capacite, taux, type_trans):
         return f"🔴 CONGESTION TDD - {nom}: taux TDD {taux:.1f}%"
     return f"🟠 BRIDAGE - {nom}: {trafic_j:.0f}/{capacite:.0f} Mbps ({taux:.1f}%, occurrences >= {SEUIL_OCCURRENCES_BRIDAGE})"
 
-
 def calculer_etat_avance(trafic_j, trafic_j1, trafic_j7, capacite, occurrences, classification,
-                          occ_tdd=0, occ_fdd=0, taux_tdd=None, taux_fdd=None):
+                          occ_tdd=0, occ_fdd=0, taux_tdd=None, taux_fdd=None, s1_fail_dur=0):
+    # Cette fonction ignore totalement s1_fail_dur.
     classification = (classification or '').upper().strip()
     occurrences = int(occurrences or 0)
     occ_tdd = int(occ_tdd or 0)
@@ -1003,6 +985,7 @@ def analyser_etats_et_alertes(sites_data: list) -> int:
                 hist.setdefault(key, {})
                 hist[key][dj] = max(hist[key].get(dj, 0), trafic)
 
+        # ✅ COUPURE_S1 n'est pas un état critique pour le statut
         etats_critiques = {'CONGESTION', 'CONGESTION(FDD)', 'CONGESTION(TDD)', 'BRIDAGE'}
         alertes_count = 0
         erreurs_persistance = 0
@@ -1018,8 +1001,11 @@ def analyser_etats_et_alertes(sites_data: list) -> int:
             occ_fdd = int(site.get('Nombre_Occurrences_FDD', 0) or 0)
             taux_tdd = site.get('taux_utilisation_tdd')
             taux_fdd = site.get('taux_utilisation_fdd')
+            s1_fail_dur = float(site.get('S1_Fail_Duration', 0) or 0)
+            s1_fail_date = site.get('S1_Fail_Date')
 
-            if not nom or trafic_j <= 0 or capacite <= 0:
+            # On garde le site si S1 > 0 même si trafic/capacité sont à 0
+            if not nom or ((trafic_j <= 0 or capacite <= 0) and s1_fail_dur <= 0):
                 site['etat_site'] = site.get('etat_site', 'NON_EVALUE')
                 site['site_status'] = site.get('site_status', 'NON_EVALUE')
                 site['is_critical'] = site.get('is_critical', False)
@@ -1028,14 +1014,16 @@ def analyser_etats_et_alertes(sites_data: list) -> int:
             trafic_j1 = hist.get(nom, {}).get(date_j1, 0)
             trafic_j7 = hist.get(nom, {}).get(date_j7, 0)
 
+            # Calcul de l'état sans S1
             etat, taux, var_j1, var_j7 = calculer_etat_avance(
                 trafic_j, trafic_j1, trafic_j7, capacite, occurrences,
-                classification, occ_tdd, occ_fdd, taux_tdd, taux_fdd
+                classification, occ_tdd, occ_fdd, taux_tdd, taux_fdd, s1_fail_dur
             )
 
             taux_global_db = None if (classification or '').upper() in ('COTRANS', 'NO_COTRANS') else (round(taux, 2) if taux else None)
             type_manquant = type_trans_manquant(type_trans)
 
+            # Détermination du statut (S1 non pris en compte)
             if etat in etats_critiques or etat == 'RISQUE_DE_CONGESTION':
                 etat_affiche = etat
                 site_status = 'CRITIQUE' if etat in etats_critiques else 'SURVEILLANCE'
@@ -1046,30 +1034,38 @@ def analyser_etats_et_alertes(sites_data: list) -> int:
                 etat_affiche = etat
                 site_status = 'SECURISE'
 
+            # Mise à jour du site dans la liste (pour le retour)
             site['etat_site'] = etat_affiche
             site['site_status'] = site_status
-            site['is_critical'] = etat in etats_critiques
+            site['is_critical'] = etat in etats_critiques   # S1 n'est pas inclus
 
             try:
                 cur.execute("SAVEPOINT site_sp")
 
+                # Insertion dans site_etat (S1 stocké mais non utilisé pour l'état)
                 cur.execute("""
                     INSERT INTO site_etat
                         (site, etat, trafic_j, trafic_j1, trafic_j7, capacite_mbps,
                          taux_utilisation, variation_j1, variation_j7, date_j,
-                         taux_utilisation_tdd, taux_utilisation_fdd)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                         taux_utilisation_tdd, taux_utilisation_fdd, s1_fail_duration, s1_fail_date)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (site) DO UPDATE SET
                         etat=EXCLUDED.etat, trafic_j=EXCLUDED.trafic_j, trafic_j1=EXCLUDED.trafic_j1,
                         trafic_j7=EXCLUDED.trafic_j7, capacite_mbps=EXCLUDED.capacite_mbps,
                         taux_utilisation=EXCLUDED.taux_utilisation, variation_j1=EXCLUDED.variation_j1,
                         variation_j7=EXCLUDED.variation_j7, date_j=EXCLUDED.date_j,
                         taux_utilisation_tdd=EXCLUDED.taux_utilisation_tdd,
-                        taux_utilisation_fdd=EXCLUDED.taux_utilisation_fdd, date_calcul=NOW()
-                """, (nom, etat, trafic_j, trafic_j1, trafic_j7, capacite,
-                      taux_global_db, round(var_j1, 2), round(var_j7, 2), date_j, taux_tdd, taux_fdd))
+                        taux_utilisation_fdd=EXCLUDED.taux_utilisation_fdd,
+                        s1_fail_duration=EXCLUDED.s1_fail_duration,
+                        s1_fail_date=EXCLUDED.s1_fail_date, date_calcul=NOW()
+                """, (nom, etat_affiche, trafic_j, trafic_j1, trafic_j7, capacite,
+                      taux_global_db, round(var_j1, 2), round(var_j7, 2), date_j,
+                      taux_tdd, taux_fdd, s1_fail_dur, s1_fail_date))
 
+                # Création des alertes (S1 ajouté mais n'affecte pas le statut)
                 alertes_a_creer = []
+                if s1_fail_dur > 0:
+                    alertes_a_creer.append('COUPURE_S1')
                 if type_manquant:
                     alertes_a_creer.append('SANS_TYPE')
                 if etat in ('A_VERIFIER_CAPACITE', 'RISQUE_DE_CONGESTION', 'CONGESTION',
@@ -1077,17 +1073,30 @@ def analyser_etats_et_alertes(sites_data: list) -> int:
                     alertes_a_creer.append(etat)
 
                 for etat_alerte in alertes_a_creer:
-                    cur.execute("SELECT id FROM site_alert WHERE site=%s AND etat=%s AND date_alerte::date=%s LIMIT 1", (nom, etat_alerte, date_j))
+                    cur.execute(
+                        "SELECT id FROM site_alert WHERE site=%s AND etat=%s AND date_alerte::date=%s LIMIT 1",
+                        (nom, etat_alerte, date_j)
+                    )
                     if not cur.fetchone():
-                        msg = construire_message_alerte(etat_alerte, nom, trafic_j, capacite, taux, type_trans)
+                        msg = construire_message_alerte(
+                            etat_alerte, nom, trafic_j, capacite, taux,
+                            type_trans, s1_fail_dur, s1_fail_date
+                        )
                         cur.execute("""
                             INSERT INTO site_alert
                                 (site, etat, trafic_j, capacite_mbps, taux_utilisation,
                                  variation_j1, variation_j7, type_trans, classification, message,
-                                 taux_utilisation_tdd, taux_utilisation_fdd)
-                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                        """, (nom, etat_alerte, trafic_j, capacite, taux_global_db,
-                              round(var_j1, 2), round(var_j7, 2), type_trans, classification, msg, taux_tdd, taux_fdd))
+                                 taux_utilisation_tdd, taux_utilisation_fdd,
+                                 s1_fail_duration, s1_fail_date, date_alerte)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        """, (
+                            nom, etat_alerte, trafic_j, capacite, taux_global_db,
+                            round(var_j1, 2), round(var_j7, 2),
+                            type_trans, classification, msg,
+                            taux_tdd, taux_fdd,
+                            s1_fail_dur, s1_fail_date,
+                            datetime.now()
+                        ))
                         alertes_count += 1
 
                 cur.execute("RELEASE SAVEPOINT site_sp")
@@ -1118,11 +1127,14 @@ def analyser_etats_et_alertes(sites_data: list) -> int:
                     print(f"   ⚠️ Erreur MAJ is_critical pour le site {nom}: {e_update}")
             conn.commit()
 
-        cur.close(); conn.close()
+        cur.close()
+        conn.close()
+
         if erreurs_persistance:
             print(f"   ⚠️ {erreurs_persistance} site(s) non persistés en base (voir erreurs ci-dessus)")
         print(f"   🔔 Alertes insérées: {alertes_count}")
         return alertes_count
+
     except Exception as e:
         print(f"⚠️ Erreur analyse états: {e}")
         traceback.print_exc()
@@ -1224,6 +1236,19 @@ def traiter_fichiers(file_trafic_content, file_port_content=None, file_type_cont
             if dropcong_fdd <= 0 and not simple_data.empty:
                 dropcong_fdd = max_dropcong(simple_data)
 
+            # Agrégation S1 sur tous les sous-ensembles
+            s1_candidates = []
+            for d in (tf_data, tdd_data, fdd_data, simple_data):
+                val, dt = calculer_s1_fail(d)
+                if val > 0:
+                    s1_candidates.append((val, dt))
+            if s1_candidates:
+                s1_fail_duration = max(v for v, _ in s1_candidates)
+                s1_fail_date = next(dt for v, dt in s1_candidates if v == s1_fail_duration)
+            else:
+                s1_fail_duration = 0.0
+                s1_fail_date = None
+
             max_fdd = max_tdd = max_final = seuil = 0.0
             occ = total_measures = 0
             occ_tdd = calculer_nombre_occurrences(tdd_data)
@@ -1251,6 +1276,7 @@ def traiter_fichiers(file_trafic_content, file_port_content=None, file_type_cont
                         lat, lng = coords_dict[cand]['latitude'], coords_dict[cand]['longitude']
                         break
 
+            # Calcul des métriques (comme avant)
             if classification == '-':
                 ref = simple_data
                 if not ref.empty:
@@ -1335,7 +1361,8 @@ def traiter_fichiers(file_trafic_content, file_port_content=None, file_type_cont
                     date_max = ref.loc[ref['MaxSpeed'].idxmax(), 'DateTime'].strftime('%Y-%m-%d %H:%M:%S')
                     total_measures = len(ref)
 
-            if max_final <= 0:
+            # On garde le site même si max_final=0 s'il y a S1
+            if max_final <= 0 and s1_fail_duration <= 0:
                 continue
 
             taux = calculer_taux_utilisation_complet(
@@ -1355,6 +1382,7 @@ def traiter_fichiers(file_trafic_content, file_port_content=None, file_type_cont
                 'Capacite_Mbps': float(capacite_mbps), 'Capacite_TDD_Mbps': float(capacite_tdd_mbps), 'Capacite_FDD_Mbps': float(capacite_fdd_mbps),
                 'taux_utilisation': taux['taux_utilisation'], 'taux_utilisation_tdd': taux['taux_utilisation_tdd'], 'taux_utilisation_fdd': taux['taux_utilisation_fdd'],
                 'DropCong_TDD': int(dropcong_tdd), 'DropCong_FDD': int(dropcong_fdd), 'DropCong_TF': int(dropcong_tf),
+                'S1_Fail_Duration': round(s1_fail_duration, 2), 'S1_Fail_Date': s1_fail_date,
                 'Latitude': lat, 'Longitude': lng, 'Duree_Jours': int(duree_jours),
                 'etat_site': 'NON_EVALUE', 'site_status': 'NON_EVALUE', 'is_critical': False,
             }
@@ -1368,6 +1396,7 @@ def traiter_fichiers(file_trafic_content, file_port_content=None, file_type_cont
             'sites_cotrans': sum(1 for s in tous_les_sites if s['Classification'] == 'COTRANS'),
             'sites_nocotrans': sum(1 for s in tous_les_sites if s['Classification'] == 'NO_COTRANS'),
             'sites_only_fdd': sum(1 for s in tous_les_sites if s['Classification'] in ('ONLY_FDD', 'FDD')),
+            'sites_s1_down': sum(1 for s in tous_les_sites if (s.get('S1_Fail_Duration') or 0) > 0),
             'date_analyse': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         }
 

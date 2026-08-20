@@ -208,7 +208,7 @@ class ProcessedSiteRepository extends ServiceEntityRepository
         ];
     }
 
-    private function applyStatusFilter($qb, ?string $statusFilter): void
+        private function applyStatusFilter($qb, ?string $statusFilter): void
     {
         if (!$statusFilter) {
             return;
@@ -244,6 +244,9 @@ class ProcessedSiteRepository extends ServiceEntityRepository
             case 'A_VERIFIER_CAPACITE':
                 $qb->andWhere('ps.status = :etatVal')->setParameter('etatVal', 'A_VERIFIER_CAPACITE');
                 break;
+            case 'COUPURE_S1':
+                $qb->andWhere('ps.status = :etatVal')->setParameter('etatVal', 'COUPURE_S1');
+                break;
             case 'NON_EVALUE':
                 $qb->andWhere('(ps.siteStatus IS NULL OR ps.siteStatus = :statusVal)')->setParameter('statusVal', 'NON_EVALUE');
                 break;
@@ -252,7 +255,7 @@ class ProcessedSiteRepository extends ServiceEntityRepository
         }
     }
 
-    public static function getStatusFilterOptions(): array
+        public static function getStatusFilterOptions(): array
     {
         return [
             'SANS_CAPACITE' => 'Sans capacité',
@@ -264,6 +267,7 @@ class ProcessedSiteRepository extends ServiceEntityRepository
             'BRIDAGE' => 'Bridage',
             'RISQUE_DE_CONGESTION' => 'Risque de congestion',
             'A_VERIFIER_CAPACITE' => 'À vérifier capacité',
+            'COUPURE_S1' => 'Coupure S1',
             'NON_EVALUE' => 'Non évalué',
         ];
     }

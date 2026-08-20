@@ -6,7 +6,7 @@
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
 .page-title { font-size: 28px; font-weight: 700; color: #0f172a; margin: 0; }
 
-.stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
+.stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 24px; }
 .stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
 .stat-number { font-size: 28px; font-weight: 800; }
 .stat-label { font-size: 13px; color: #64748b; text-transform: uppercase; font-weight: 600; }
@@ -14,6 +14,7 @@
 .stat-warning .stat-number { color: #f59e0b; }
 .stat-secure .stat-number { color: #22c55e; }
 .stat-total .stat-number { color: #3b82f6; }
+.stat-s1 .stat-number { color: #7f1d1d; }
 
 .filters-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; align-items: end; }
 .filter-group { display: flex; flex-direction: column; gap: 4px; }
@@ -23,7 +24,7 @@
 .filter-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
 
 .table-wrap { overflow-x: auto; background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; }
-.table-wrap table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 1200px; }
+.table-wrap table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 1400px; }
 .table-wrap th { background: #f1f5f9; text-align: left; padding: 12px 14px; font-weight: 700; color: #1e293b; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
 .table-wrap td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .table-wrap tr:hover { background: #f8fafc; }
@@ -34,6 +35,7 @@
 .badge-green { background: #ccfbf1; color: #065f46; }
 .badge-blue { background: #dbeafe; color: #1e40af; }
 .badge-gray { background: #f1f5f9; color: #475569; }
+.badge-s1 { background: #450a0a; color: #fecaca; font-weight: 700; }
 .btn-sm { padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: none; cursor: pointer; transition: background 0.2s; }
 .btn-outline { background: transparent; border: 1px solid #cbd5e1; color: #334155; }
 .btn-outline:hover { background: #f1f5f9; }
@@ -109,6 +111,10 @@
             <div class="stat-number">{{ sansTypeSites }}</div>
             <div class="stat-label">Sans type</div>
         </div>
+        <div class="stat-card stat-s1" style="border-left: 4px solid #7f1d1d;">
+            <div class="stat-number">{{ s1DownSites|default(0) }}</div>
+            <div class="stat-label">Coupures S1</div>
+        </div>
     </div>
 
     {# Filtres #}
@@ -175,6 +181,8 @@
                     <th>Taux Util. Global</th>
                     <th>Taux Util. TDD</th>
                     <th>Taux Util. FDD</th>
+                    <th>S1 Fail (s)</th>
+                    <th>Date coupure S1</th>
                     <th>Statut</th>
                     <th>État</th>
                     <th>Actions</th>
@@ -183,7 +191,7 @@
             <tbody id="siteTableBody">
                 {% if sites is empty %}
                     <tr>
-                        <td colspan="13" style="text-align:center; padding:30px; color:#64748b;">
+                        <td colspan="15" style="text-align:center; padding:30px; color:#64748b;">
                             Aucun site trouvé.
                             <a href="#" id="importTrigger" style="color:#3b82f6; font-weight:600;">Importer des données</a>
                         </td>
@@ -192,11 +200,13 @@
                     {% for site in sites %}
                         {% set needType = not site.typeTrans %}
                         {% set needCapacity = site.capaciteTddMbps is null and site.capaciteFddMbps is null %}
+                        {% set isS1Down = site.s1FailDuration is not null and site.s1FailDuration > 0 %}
                         <tr data-nb-occ="{{ site.nombreOccurrences ?? 0 }}"
                             data-taux="{{ site.tauxUtilisation ?? 0 }}"
                             data-critical="{{ site.isCritical ? 1 : 0 }}"
                             data-need-type="{{ needType ? 1 : 0 }}"
-                            data-need-capacity="{{ needCapacity ? 1 : 0 }}">
+                            data-need-capacity="{{ needCapacity ? 1 : 0 }}"
+                            data-s1-down="{{ isS1Down ? 1 : 0 }}">
                             <td><strong>{{ site.siteName }}</strong></td>
                             <td>{{ site.serviceName ?: '-' }}</td>
                             <td>{{ site.classification ?: '-' }}</td>
@@ -231,9 +241,14 @@
                             <td>{{ site.tauxUtilisationTdd is not null ? site.tauxUtilisationTdd|number_format(2, '.', ' ') ~ '%' : '-' }}</td>
                             <td>{{ site.tauxUtilisationFdd is not null ? site.tauxUtilisationFdd|number_format(2, '.', ' ') ~ '%' : '-' }}</td>
                             <td>
-                                {# ✅ CORRIGÉ : 'SOUS_OBSERVATION' remplacé par 'SURVEILLANCE'
-                                   (vraie valeur produite par analyser_etats_et_alertes),
-                                   et ajout de NON_EVALUE / ERREUR_EVALUATION en gris. #}
+                                {% if isS1Down %}
+                                    <span class="badge badge-s1">{{ site.s1FailDuration|number_format(0, '.', ' ') }}s</span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ site.s1FailDate ? site.s1FailDate|date('d/m/Y H:i') : '-' }}</td>
+                            <td>
                                 {% set status = site.siteStatus|default('NON_EVALUE') %}
                                 <span class="badge
                                     {% if status == 'CRITIQUE' %}badge-red
@@ -245,7 +260,8 @@
                             <td>
                                 {% set etat = site.status|default('OK') %}
                                 <span class="badge
-                                    {% if etat in ['CONGESTION', 'CONGESTION(FDD)', 'CONGESTION(TDD)'] %}badge-red
+                                    {% if etat == 'COUPURE_S1' %}badge-s1
+                                    {% elseif etat in ['CONGESTION', 'CONGESTION(FDD)', 'CONGESTION(TDD)'] %}badge-red
                                     {% elseif etat == 'BRIDAGE' %}badge-yellow
                                     {% elseif etat == 'RISQUE_DE_CONGESTION' %}badge-orange
                                     {% elseif etat == 'A_VERIFIER_CAPACITE' %}badge-blue

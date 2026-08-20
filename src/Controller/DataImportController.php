@@ -201,6 +201,18 @@ class DataImportController extends AbstractController
             $dropCongFdd = (int) ($item['DropCong_FDD'] ?? $item['dropcong_fdd'] ?? 0);
             $dropCongTf = (int) ($item['DropCong_TF'] ?? $item['dropcong_tf'] ?? 0);
 
+            // ✅ NOUVEAU : KPI indisponibilité S1
+            $s1FailDuration = (float) ($item['S1_Fail_Duration'] ?? $item['s1FailDuration'] ?? 0);
+            $s1FailDateRaw = $item['S1_Fail_Date'] ?? $item['s1FailDate'] ?? null;
+            $s1FailDate = null;
+            if (!empty($s1FailDateRaw)) {
+                try {
+                    $s1FailDate = new \DateTime((string) $s1FailDateRaw);
+                } catch (\Throwable $e) {
+                    $s1FailDate = null;
+                }
+            }
+
             $latitude = $this->extractNullableFloat($item, ['Latitude', 'latitude']);
             $longitude = $this->extractNullableFloat($item, ['Longitude', 'longitude']);
             if (($latitude === null || $longitude === null) && $existingSite) {
@@ -248,6 +260,8 @@ class DataImportController extends AbstractController
                 $tauxUtilisationTdd === null ? 'null' : sprintf('%.6f', (float) $tauxUtilisationTdd),
                 $tauxUtilisationFdd === null ? 'null' : sprintf('%.6f', (float) $tauxUtilisationFdd),
                 $dropCongTdd, $dropCongFdd, $dropCongTf,
+                sprintf('%.4f', $s1FailDuration),
+                $s1FailDate ? $s1FailDate->format('Y-m-d H:i:s') : '',
                 $latitude === null ? 'null' : sprintf('%.6f', (float) $latitude),
                 $longitude === null ? 'null' : sprintf('%.6f', (float) $longitude),
                 mb_strtolower((string) $status),
@@ -263,17 +277,18 @@ class DataImportController extends AbstractController
                 continue;
             }
 
-            $etatsSurveilles = ['CONGESTION', 'CONGESTION(FDD)', 'CONGESTION(TDD)', 'BRIDAGE', 'RISQUE_DE_CONGESTION'];
+            $etatsSurveilles = ['CONGESTION', 'CONGESTION(FDD)', 'CONGESTION(TDD)', 'BRIDAGE', 'RISQUE_DE_CONGESTION', 'COUPURE_S1'];
             $ancienEtat = $existingSite ? $existingSite->getStatus() : null;
             if (in_array($etatSite, $etatsSurveilles, true) && $ancienEtat !== $etatSite) {
                 $alertMessage = sprintf(
-                    "Trafic: %.2f Mbps / Capacité: %.2f Mbps (%.1f%%)\nOccurrences: %d\nClassification: %s / Type: %s",
+                    "Trafic: %.2f Mbps / Capacité: %.2f Mbps (%.1f%%)\nOccurrences: %d\nClassification: %s / Type: %s%s",
                     $maxTrafic,
                     $capaciteMbps,
                     $tauxUtilisation ?? 0,
                     $nombreOccurrences,
                     $classification,
-                    $typeTrans ?: 'NON_DEFINI'
+                    $typeTrans ?: 'NON_DEFINI',
+                    $s1FailDuration > 0 ? sprintf("\nS1 indisponible: %.0fs", $s1FailDuration) : ''
                 );
                 $pendingAlerts[] = [
                     'site' => $siteName,
@@ -313,6 +328,8 @@ class DataImportController extends AbstractController
             $processedSite->setDropCongTdd($dropCongTdd);
             $processedSite->setDropCongFdd($dropCongFdd);
             $processedSite->setDropCongTf($dropCongTf);
+            $processedSite->setS1FailDuration($s1FailDuration > 0 ? $s1FailDuration : null);
+            $processedSite->setS1FailDate($s1FailDate);
             $processedSite->setLatitude($latitude);
             $processedSite->setLongitude($longitude);
             $processedSite->setService($resolvedService);
@@ -322,10 +339,6 @@ class DataImportController extends AbstractController
             $processedSite->setDataHash($hash);
             $processedSite->setRecommendedAction($recommendedAction);
             $processedSite->setFinalActionPlan($finalActionPlan);
-            // ✅ NOTE : capaciteUpdatedAt / lastActionPerformed ne sont
-            // PAS touchés ici -- ils tracent les mises à jour manuelles
-            // et via import capacité séparé, pas le traitement trafic
-            // initial (qui définit les valeurs de départ).
 
             if (!$existingSite) {
                 $em->persist($processedSite);
@@ -384,6 +397,10 @@ class DataImportController extends AbstractController
         $actionLabel = 'Maintenir sous surveillance';
 
         switch ($etatSite) {
+            case 'COUPURE_S1':
+                $actionType = 'URGENT_S1_CHECK';
+                $actionLabel = 'Verifier immediatement la liaison S1 (coupure detectee)';
+                break;
             case 'CONGESTION':
                 $actionType = 'URGENT_UPGRADE';
                 $actionLabel = 'Upgrade urgent de capacite';
@@ -575,12 +592,8 @@ class DataImportController extends AbstractController
                 $site->setTypeTrans($typeTrans);
             }
 
-            // ✅ Recalcul complet de l'état/statut/taux via le service partagé
             $stateCalculator->recalculer($site);
 
-            // ✅ Traçabilité : capacité modifiée via import -> on stampe
-            // la date de MAJ et l'action, même si la valeur n'a pas
-            // changé numériquement (on considère l'import comme l'action).
             if ($capaciteAvant !== $capaciteGlobale) {
                 $site->setCapaciteUpdatedAt($now);
                 $site->setLastActionPerformed('Import capacité ' . $importType . ' (' . number_format($value, 0) . ' Mbps)');

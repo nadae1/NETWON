@@ -19,71 +19,71 @@ use Symfony\Component\Routing\Attribute\Route;
 class SuperuserDashboardController extends AbstractController
 {
 
-#[Route('/superuser/dashboard', name: 'superuser_dashboard_home')]
-public function superuserDashboard(
-    Request $request,
-    ProcessedSiteRepository $processedSiteRepository,
-    TicketRepository $ticketRepository,
-    SiteAlertRepository $siteAlertRepository
-): Response {
-    $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
+    #[Route('/superuser/dashboard', name: 'superuser_dashboard_home')]
+    public function superuserDashboard(
+        Request $request,
+        ProcessedSiteRepository $processedSiteRepository,
+        TicketRepository $ticketRepository,
+        SiteAlertRepository $siteAlertRepository
+    ): Response {
+        $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
 
-    $serviceFilter = $request->query->get('service');
-    $classificationFilter = $request->query->get('classification');
-    $criticalFilter = $request->query->get('critical');
+        $serviceFilter = $request->query->get('service');
+        $classificationFilter = $request->query->get('classification');
+        $criticalFilter = $request->query->get('critical');
 
-    $totalSites = $processedSiteRepository->countAllSites($serviceFilter);
+        $totalSites = $processedSiteRepository->countAllSites($serviceFilter);
 
-    // ✅ Utilisation de siteStatus = 'CRITIQUE' pour correspondre à la page Alertes (117)
-    $criticalSites = $processedSiteRepository->countBySiteStatus('CRITIQUE', $serviceFilter);
-    $criticalPercentage = $totalSites > 0 ? round(($criticalSites / $totalSites) * 100, 1) : 0;
+        // ✅ Utilisation de siteStatus = 'CRITIQUE' pour correspondre à la page Alertes (117)
+        $criticalSites = $processedSiteRepository->countBySiteStatus('CRITIQUE', $serviceFilter);
+        $criticalPercentage = $totalSites > 0 ? round(($criticalSites / $totalSites) * 100, 1) : 0;
 
-    // Total des alertes réseau récentes (événements, pas sites distincts)
-    $alertCounts = $siteAlertRepository->countByEtat(7);
-    $defaults = ['CONGESTION' => 0, 'BRIDAGE' => 0, 'RISQUE_DE_CONGESTION' => 0];
-    $alertCounts = array_merge($defaults, $alertCounts);
-    $recentAlerts = array_sum($alertCounts);
+        // Total des alertes réseau récentes (événements, pas sites distincts)
+        $alertCounts = $siteAlertRepository->countByEtat(7);
+        $defaults = ['CONGESTION' => 0, 'BRIDAGE' => 0, 'RISQUE_DE_CONGESTION' => 0];
+        $alertCounts = array_merge($defaults, $alertCounts);
+        $recentAlerts = array_sum($alertCounts);
 
-    $serviceDistribution = $processedSiteRepository->getServiceDistribution();
-    $classificationStats = $processedSiteRepository->getClassificationStats($serviceFilter);
+        $serviceDistribution = $processedSiteRepository->getServiceDistribution();
+        $classificationStats = $processedSiteRepository->getClassificationStats($serviceFilter);
 
-    $allServices = array_keys($serviceDistribution);
-    $allClassifications = array_keys($processedSiteRepository->getClassificationStats(null));
+        $allServices = array_keys($serviceDistribution);
+        $allClassifications = array_keys($processedSiteRepository->getClassificationStats(null));
 
-    // Avancement réel des workflows
-    $workflowStats = $ticketRepository->getWorkflowSitesProgress();
+        // Avancement réel des workflows
+        $workflowStats = $ticketRepository->getWorkflowSitesProgress();
 
-    $activeWorkflows = (int) $ticketRepository->createQueryBuilder('t')
-        ->select('COUNT(t.id)')
-        ->where('t.status NOT IN (:closedStatuses)')
-        ->setParameter('closedStatuses', ['completed', 'closed'])
-        ->getQuery()
-        ->getSingleScalarResult();
+        $activeWorkflows = (int) $ticketRepository->createQueryBuilder('t')
+            ->select('COUNT(t.id)')
+            ->where('t.status NOT IN (:closedStatuses)')
+            ->setParameter('closedStatuses', ['completed', 'closed'])
+            ->getQuery()
+            ->getSingleScalarResult();
 
-    $totalWorkflows = (int) $ticketRepository->createQueryBuilder('t')->select('COUNT(t.id)')->getQuery()->getSingleScalarResult();
+        $totalWorkflows = (int) $ticketRepository->createQueryBuilder('t')->select('COUNT(t.id)')->getQuery()->getSingleScalarResult();
 
-    $recentProcessedSites = $ticketRepository->findRecentlyProcessedTicketSites(5);
+        $recentProcessedSites = $ticketRepository->findRecentlyProcessedTicketSites(5);
 
-    return $this->render('dashboard/superuser/home.html.twig', [
-        'totalSites' => $totalSites,
-        'criticalSites' => $criticalSites,
-        'criticalPercentage' => $criticalPercentage,
-        'recentAlerts' => $recentAlerts,
-        'serviceDistribution' => $serviceDistribution,
-        'classificationStats' => $classificationStats,
-        'allServices' => $allServices,
-        'allClassifications' => $allClassifications,
-        'currentService' => $serviceFilter,
-        'currentClassification' => $classificationFilter,
-        'currentCritical' => $criticalFilter,
-        'workflowProgress' => $workflowStats['progress_percent'],
-        'workflowCompletedSites' => $workflowStats['completed_sites'],
-        'workflowTotalSites' => $workflowStats['total_sites'],
-        'activeWorkflows' => $activeWorkflows,
-        'totalWorkflows' => $totalWorkflows,
-        'recentProcessedSites' => $recentProcessedSites,
-    ]);
-}
+        return $this->render('dashboard/superuser/home.html.twig', [
+            'totalSites' => $totalSites,
+            'criticalSites' => $criticalSites,
+            'criticalPercentage' => $criticalPercentage,
+            'recentAlerts' => $recentAlerts,
+            'serviceDistribution' => $serviceDistribution,
+            'classificationStats' => $classificationStats,
+            'allServices' => $allServices,
+            'allClassifications' => $allClassifications,
+            'currentService' => $serviceFilter,
+            'currentClassification' => $classificationFilter,
+            'currentCritical' => $criticalFilter,
+            'workflowProgress' => $workflowStats['progress_percent'],
+            'workflowCompletedSites' => $workflowStats['completed_sites'],
+            'workflowTotalSites' => $workflowStats['total_sites'],
+            'activeWorkflows' => $activeWorkflows,
+            'totalWorkflows' => $totalWorkflows,
+            'recentProcessedSites' => $recentProcessedSites,
+        ]);
+    }
     #[Route('/superuser/plan-data', name: 'superuser_plan_data')]
     public function planData(
         Request $request,
@@ -132,6 +132,7 @@ public function superuserDashboard(
         $congestionSites = 0;
         $bridageSites = 0;
         $aVerifierSites = 0;
+        $s1DownSites = 0;
 
         foreach ($allSites as $site) {
             $status = $site->getSiteStatus() ?? 'NON_EVALUE';
@@ -143,6 +144,10 @@ public function superuserDashboard(
                 $warningSites++;
             } elseif ($status === 'SECURISE') {
                 $secureSites++;
+            }
+
+            if ($site->getS1FailDuration() !== null && $site->getS1FailDuration() > 0) {
+                $s1DownSites++;
             }
 
             if ($etat === 'SANS_TYPE') {
@@ -199,141 +204,142 @@ public function superuserDashboard(
             'importNeeded' => $totalSites === 0,
             'isTop10' => $top10,
             'isNeedsUpdate' => $needsUpdate,
+            's1DownSites' => $s1DownSites,
         ]);
     }
-// src/Controller/SuperuserDashboardController.php
+    // src/Controller/SuperuserDashboardController.php
 
-#[Route('/superuser/ia-recommendations', name: 'superuser_ia_recommendations', methods: ['GET', 'POST'])]
-public function iaRecommendations(
-    Request $request,
-    ProcessedSiteRepository $processedSiteRepository,
-    IaRecommendationService $iaService,
-    EntityManagerInterface $em
-): Response {
-    $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
+    #[Route('/superuser/ia-recommendations', name: 'superuser_ia_recommendations', methods: ['GET', 'POST'])]
+    public function iaRecommendations(
+        Request $request,
+        ProcessedSiteRepository $processedSiteRepository,
+        IaRecommendationService $iaService,
+        EntityManagerInterface $em
+    ): Response {
+        $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
 
-    $service = $request->query->get('service');
-    $classification = $request->query->get('classification');
-    $search = trim((string) $request->query->get('search', ''));
-    $filter = $request->query->get('filter', 'all');
+        $service = $request->query->get('service');
+        $classification = $request->query->get('classification');
+        $search = trim((string) $request->query->get('search', ''));
+        $filter = $request->query->get('filter', 'all');
 
-    // Récupérer tous les sites selon les filtres
-    $allSites = $processedSiteRepository->findAllSitesOrderedByStatus(
-        $service ?: null,
-        $classification ?: null,
-        $search
-    );
-
-    // Filtrer : garder uniquement les sites non sécurisés (CRITIQUE ou SURVEILLANCE)
-    $targetSites = array_filter($allSites, function (ProcessedSite $site) {
-        $status = $site->getSiteStatus() ?? 'NON_EVALUE';
-        return in_array($status, ['CRITIQUE', 'SURVEILLANCE'], true);
-    });
-
-    // Générer les recommandations
-    $recommendations = $iaService->analyzeSites($targetSites);
-
-    // Récupérer les données de trafic en batch pour tous les préfixes
-    $prefixes = array_map(fn($s) => $s->getSiteName(), $targetSites);
-    $batchTraffic = $processedSiteRepository->getTrafficHistoryForPrefixes($prefixes, 30);
-
-    // Alimenter chaque recommandation avec les données réelles
-    foreach ($recommendations as &$rec) {
-        $siteName = $rec['siteName'];
-        $data = $batchTraffic[$siteName] ?? ['labels' => [], 'values' => []];
-
-        $rec['currentTrafficData'] = $data;
-
-        // Projection après action (cible 65% du taux)
-        $tauxActuel = $rec['tauxGlobal'];
-        $targetUtil = 65.0;
-        $ratio = ($tauxActuel > $targetUtil && $tauxActuel > 0) ? ($targetUtil / $tauxActuel) : 1.0;
-        $afterValues = array_map(fn($v) => round($v * $ratio, 2), $data['values']);
-
-        $rec['afterActionData'] = ['labels' => $data['labels'], 'values' => $afterValues];
-        $rec['hasTrafficData'] = !empty($data['values']);
-
-        $rec['graphAnalysis'] = $rec['hasTrafficData']
-            ? $iaService->confirmSeverityFromGraph($data['values'], $rec['severity'])
-            : ['confirmed' => null, 'trend' => 'insuffisant', 'variation' => 0, 'label' => 'ℹ️ Aucun historique de trafic disponible pour ce site'];
-    }
-    unset($rec);
-
-    // Filtre Top 10 (si demandé)
-    if ($filter === 'top10') {
-        usort($recommendations, function ($a, $b) {
-            if ($b['nombreOccurrences'] !== $a['nombreOccurrences']) {
-                return $b['nombreOccurrences'] <=> $a['nombreOccurrences'];
-            }
-            return $b['tauxGlobal'] <=> $a['tauxGlobal'];
-        });
-        $recommendations = array_slice($recommendations, 0, 10);
-    }
-
-    $globalStats = $iaService->generateGlobalActionPlan($recommendations);
-    $allActionTypes = $iaService->getAllActionTypes();
-
-    // POST : création du workflow
-    if ($request->isMethod('POST')) {
-        $selectedSiteIds = $request->request->all('selected_sites');
-
-        if (empty($selectedSiteIds)) {
-            $this->addFlash('warning', 'Aucun site sélectionné.');
-            return $this->redirectToRoute('superuser_ia_recommendations');
-        }
-
-        $deadline = $request->request->get('deadline');
-        if (!$deadline) {
-            $this->addFlash('error', 'La date limite est obligatoire pour créer le workflow.');
-            return $this->redirectToRoute('superuser_ia_recommendations');
-        }
-
-        try {
-            $deadlineDate = new \DateTime($deadline);
-        } catch (\Exception $e) {
-            $this->addFlash('error', 'Date limite invalide.');
-            return $this->redirectToRoute('superuser_ia_recommendations');
-        }
-
-        $priority = $request->request->get('workflow_priority', 'medium');
-        $workflowName = trim((string) $request->request->get('workflow_name', ''));
-
-        $actionsInput = $request->request->all('actions');
-        $commentsInput = $request->request->all('comments');
-
-        $validatedActions = [];
-        foreach ($selectedSiteIds as $siteId) {
-            $validatedActions[] = [
-                'siteId' => $siteId,
-                'actionType' => $actionsInput[$siteId]['action_type'] ?? 'MONITORING',
-                'comment' => $commentsInput[$siteId] ?? null,
-            ];
-        }
-
-        $workflow = $iaService->createWorkflowFromRecommendations(
-            $validatedActions,
-            $this->getUser(),
-            $deadlineDate,
-            $priority,
-            $workflowName !== '' ? $workflowName : null
+        // Récupérer tous les sites selon les filtres
+        $allSites = $processedSiteRepository->findAllSitesOrderedByStatus(
+            $service ?: null,
+            $classification ?: null,
+            $search
         );
 
-        $this->addFlash('success', sprintf('Workflow #%d créé pour %d site(s).', $workflow->getId(), count($validatedActions)));
-        return $this->redirectToRoute('superuser_workflow_show', ['id' => $workflow->getId()]);
-    }
+        // Filtrer : garder uniquement les sites non sécurisés (CRITIQUE ou SURVEILLANCE)
+        $targetSites = array_filter($allSites, function (ProcessedSite $site) {
+            $status = $site->getSiteStatus() ?? 'NON_EVALUE';
+            return in_array($status, ['CRITIQUE', 'SURVEILLANCE'], true);
+        });
 
-    return $this->render('dashboard/superuser/ia_recommendations.html.twig', [
-        'recommendations' => $recommendations,
-        'globalStats' => $globalStats,
-        'allActionTypes' => $allActionTypes,
-        'services' => array_keys($processedSiteRepository->getServiceDistribution()),
-        'classifications' => array_keys($processedSiteRepository->getClassificationStats($service)),
-        'currentService' => $service,
-        'currentClassification' => $classification,
-        'currentSearch' => $search,
-        'currentFilter' => $filter,
-    ]);
-}
+        // Générer les recommandations
+        $recommendations = $iaService->analyzeSites($targetSites);
+
+        // Récupérer les données de trafic en batch pour tous les préfixes
+        $prefixes = array_map(fn($s) => $s->getSiteName(), $targetSites);
+        $batchTraffic = $processedSiteRepository->getTrafficHistoryForPrefixes($prefixes, 30);
+
+        // Alimenter chaque recommandation avec les données réelles
+        foreach ($recommendations as &$rec) {
+            $siteName = $rec['siteName'];
+            $data = $batchTraffic[$siteName] ?? ['labels' => [], 'values' => []];
+
+            $rec['currentTrafficData'] = $data;
+
+            // Projection après action (cible 65% du taux)
+            $tauxActuel = $rec['tauxGlobal'];
+            $targetUtil = 65.0;
+            $ratio = ($tauxActuel > $targetUtil && $tauxActuel > 0) ? ($targetUtil / $tauxActuel) : 1.0;
+            $afterValues = array_map(fn($v) => round($v * $ratio, 2), $data['values']);
+
+            $rec['afterActionData'] = ['labels' => $data['labels'], 'values' => $afterValues];
+            $rec['hasTrafficData'] = !empty($data['values']);
+
+            $rec['graphAnalysis'] = $rec['hasTrafficData']
+                ? $iaService->confirmSeverityFromGraph($data['values'], $rec['severity'])
+                : ['confirmed' => null, 'trend' => 'insuffisant', 'variation' => 0, 'label' => 'ℹ️ Aucun historique de trafic disponible pour ce site'];
+        }
+        unset($rec);
+
+        // Filtre Top 10 (si demandé)
+        if ($filter === 'top10') {
+            usort($recommendations, function ($a, $b) {
+                if ($b['nombreOccurrences'] !== $a['nombreOccurrences']) {
+                    return $b['nombreOccurrences'] <=> $a['nombreOccurrences'];
+                }
+                return $b['tauxGlobal'] <=> $a['tauxGlobal'];
+            });
+            $recommendations = array_slice($recommendations, 0, 10);
+        }
+
+        $globalStats = $iaService->generateGlobalActionPlan($recommendations);
+        $allActionTypes = $iaService->getAllActionTypes();
+
+        // POST : création du workflow
+        if ($request->isMethod('POST')) {
+            $selectedSiteIds = $request->request->all('selected_sites');
+
+            if (empty($selectedSiteIds)) {
+                $this->addFlash('warning', 'Aucun site sélectionné.');
+                return $this->redirectToRoute('superuser_ia_recommendations');
+            }
+
+            $deadline = $request->request->get('deadline');
+            if (!$deadline) {
+                $this->addFlash('error', 'La date limite est obligatoire pour créer le workflow.');
+                return $this->redirectToRoute('superuser_ia_recommendations');
+            }
+
+            try {
+                $deadlineDate = new \DateTime($deadline);
+            } catch (\Exception $e) {
+                $this->addFlash('error', 'Date limite invalide.');
+                return $this->redirectToRoute('superuser_ia_recommendations');
+            }
+
+            $priority = $request->request->get('workflow_priority', 'medium');
+            $workflowName = trim((string) $request->request->get('workflow_name', ''));
+
+            $actionsInput = $request->request->all('actions');
+            $commentsInput = $request->request->all('comments');
+
+            $validatedActions = [];
+            foreach ($selectedSiteIds as $siteId) {
+                $validatedActions[] = [
+                    'siteId' => $siteId,
+                    'actionType' => $actionsInput[$siteId]['action_type'] ?? 'MONITORING',
+                    'comment' => $commentsInput[$siteId] ?? null,
+                ];
+            }
+
+            $workflow = $iaService->createWorkflowFromRecommendations(
+                $validatedActions,
+                $this->getUser(),
+                $deadlineDate,
+                $priority,
+                $workflowName !== '' ? $workflowName : null
+            );
+
+            $this->addFlash('success', sprintf('Workflow #%d créé pour %d site(s).', $workflow->getId(), count($validatedActions)));
+            return $this->redirectToRoute('superuser_workflow_show', ['id' => $workflow->getId()]);
+        }
+
+        return $this->render('dashboard/superuser/ia_recommendations.html.twig', [
+            'recommendations' => $recommendations,
+            'globalStats' => $globalStats,
+            'allActionTypes' => $allActionTypes,
+            'services' => array_keys($processedSiteRepository->getServiceDistribution()),
+            'classifications' => array_keys($processedSiteRepository->getClassificationStats($service)),
+            'currentService' => $service,
+            'currentClassification' => $classification,
+            'currentSearch' => $search,
+            'currentFilter' => $filter,
+        ]);
+    }
     private function buildRealTrafficData(
         ProcessedSite $site,
         ProcessedSiteRepository $repo,
@@ -445,25 +451,25 @@ public function iaRecommendations(
     }
 
     #[Route('/superuser/export', name: 'superuser_dashboard_export', methods: ['GET'])]
-public function exportForm(ProcessedSiteRepository $repo): Response
-{
-    $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
+    public function exportForm(ProcessedSiteRepository $repo): Response
+    {
+        $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
 
-    // Récupération des périodes d'import disponibles (depuis trafic_historique)
-    $periods = $repo->getAvailableImportWeeks(); // à implémenter (voir plus bas)
+        // Récupération des périodes d'import disponibles (depuis trafic_historique)
+        $periods = $repo->getAvailableImportWeeks(); // à implémenter (voir plus bas)
 
-    // Définition des colonnes disponibles
-    $allColumns = $this->getAvailableColumns();
-    $defaultColumns = ['site', 'classification', 'typeTrans', 'maxTrafic', 'maxTraficTdd', 'maxTraficFdd']; // colonnes pré-cochées
+        // Définition des colonnes disponibles
+        $allColumns = $this->getAvailableColumns();
+        $defaultColumns = ['site', 'classification', 'typeTrans', 'maxTrafic', 'maxTraficTdd', 'maxTraficFdd']; // colonnes pré-cochées
 
-    return $this->render('dashboard/superuser/export.html.twig', [
-        'services' => array_keys($repo->getServiceDistribution()),
-        'siteNames' => $repo->findDistinctSiteNames(),
-        'periods' => $periods,
-        'allColumns' => $allColumns,
-        'defaultColumns' => $defaultColumns,
-    ]);
-}
+        return $this->render('dashboard/superuser/export.html.twig', [
+            'services' => array_keys($repo->getServiceDistribution()),
+            'siteNames' => $repo->findDistinctSiteNames(),
+            'periods' => $periods,
+            'allColumns' => $allColumns,
+            'defaultColumns' => $defaultColumns,
+        ]);
+    }
 
     #[Route('/superuser/kpis', name: 'superuser_dashboard_kpis')]
     public function kpis(ProcessedSiteRepository $processedSiteRepository): Response
@@ -509,56 +515,56 @@ public function exportForm(ProcessedSiteRepository $repo): Response
         }
     }
 
-    
 
-#[Route('/superuser/alerts', name: 'superuser_dashboard_alerts')]
-public function alerts(
-    ProcessedSiteRepository $processedSiteRepository,
-    NotificationRepository $notificationRepository,
-    SiteAlertRepository $siteAlertRepository
-): Response {
-    $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
 
-    // Récupération des alertes réseau des 7 derniers jours
-    $siteAlerts = $siteAlertRepository->findRecentAlerts(7);
+    #[Route('/superuser/alerts', name: 'superuser_dashboard_alerts')]
+    public function alerts(
+        ProcessedSiteRepository $processedSiteRepository,
+        NotificationRepository $notificationRepository,
+        SiteAlertRepository $siteAlertRepository
+    ): Response {
+        $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
 
-    // Pour chaque alerte, on récupère les notifications liées
-    $alertNotifications = [];
-    foreach ($siteAlerts as $alert) {
-        $notifs = $notificationRepository->findBy(['alert' => $alert]);
-        $alertNotifications[$alert->getId()] = $notifs;
+        // Récupération des alertes réseau des 7 derniers jours
+        $siteAlerts = $siteAlertRepository->findRecentAlerts(7);
+
+        // Pour chaque alerte, on récupère les notifications liées
+        $alertNotifications = [];
+        foreach ($siteAlerts as $alert) {
+            $notifs = $notificationRepository->findBy(['alert' => $alert]);
+            $alertNotifications[$alert->getId()] = $notifs;
+        }
+
+        // Compteurs par état
+        $siteAlertCounts = $siteAlertRepository->countByEtat(7);
+        // Assurer les clés par défaut
+        $defaults = ['CONGESTION' => 0, 'BRIDAGE' => 0, 'RISQUE_DE_CONGESTION' => 0];
+        $siteAlertCounts = array_merge($defaults, $siteAlertCounts);
+
+        // Notifications de retard (workflow) existantes
+        $notifications = $notificationRepository->createQueryBuilder('n')
+            ->where('n.type IN (:types)')
+            ->setParameter('types', ['deadline_reminder', 'ticket_overdue', 'deadline_overdue', 'deadline_yellow', 'deadline_red'])
+            ->orderBy('n.createdAt', 'DESC')
+            ->setMaxResults(100)
+            ->getQuery()
+            ->getResult();
+
+        $nbDelayAlerts = $notificationRepository->createQueryBuilder('n')
+            ->select('COUNT(DISTINCT n.ticket)')
+            ->where('n.type IN (:types)')
+            ->setParameter('types', ['deadline_reminder', 'ticket_overdue', 'deadline_overdue', 'deadline_yellow', 'deadline_red'])
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        return $this->render('dashboard/superuser/alerts.html.twig', [
+            'siteAlerts' => $siteAlerts,
+            'alertNotifications' => $alertNotifications,
+            'siteAlertCounts' => $siteAlertCounts,
+            'notifications' => $notifications,
+            'nbDelayAlerts' => $nbDelayAlerts,
+        ]);
     }
-
-    // Compteurs par état
-    $siteAlertCounts = $siteAlertRepository->countByEtat(7);
-    // Assurer les clés par défaut
-    $defaults = ['CONGESTION' => 0, 'BRIDAGE' => 0, 'RISQUE_DE_CONGESTION' => 0];
-    $siteAlertCounts = array_merge($defaults, $siteAlertCounts);
-
-    // Notifications de retard (workflow) existantes
-    $notifications = $notificationRepository->createQueryBuilder('n')
-        ->where('n.type IN (:types)')
-        ->setParameter('types', ['deadline_reminder', 'ticket_overdue', 'deadline_overdue', 'deadline_yellow', 'deadline_red'])
-        ->orderBy('n.createdAt', 'DESC')
-        ->setMaxResults(100)
-        ->getQuery()
-        ->getResult();
-
-    $nbDelayAlerts = $notificationRepository->createQueryBuilder('n')
-        ->select('COUNT(DISTINCT n.ticket)')
-        ->where('n.type IN (:types)')
-        ->setParameter('types', ['deadline_reminder', 'ticket_overdue', 'deadline_overdue', 'deadline_yellow', 'deadline_red'])
-        ->getQuery()
-        ->getSingleScalarResult();
-
-    return $this->render('dashboard/superuser/alerts.html.twig', [
-        'siteAlerts' => $siteAlerts,
-        'alertNotifications' => $alertNotifications,
-        'siteAlertCounts' => $siteAlertCounts,
-        'notifications' => $notifications,
-        'nbDelayAlerts' => $nbDelayAlerts,
-    ]);
-}
 
     #[Route('/superuser/fh-workflows', name: 'superuser_fh_workflows')]
     public function fhWorkflows(TicketRepository $ticketRepository): Response
@@ -639,207 +645,221 @@ public function alerts(
     }
 
     #[Route('/superuser/sites/export', name: 'superuser_dashboard_sites_export', methods: ['GET'])]
-public function exportSitesCsv(
-    Request $request,
-    ProcessedSiteRepository $processedSiteRepository
-): Response {
-    $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
+    public function exportSitesCsv(
+        Request $request,
+        ProcessedSiteRepository $processedSiteRepository
+    ): Response {
+        $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
 
-    // Récupération des filtres depuis la requête
-    $service = $request->query->get('service');
-    $classification = $request->query->get('classification');
-    $statusFilter = $request->query->get('status');
-    $search = $request->query->get('search');
+        // Récupération des filtres depuis la requête
+        $service = $request->query->get('service');
+        $classification = $request->query->get('classification');
+        $statusFilter = $request->query->get('status');
+        $search = $request->query->get('search');
 
-    // Récupération des sites selon les filtres (on utilise la même méthode que l'admin)
-    $sites = $processedSiteRepository->findSitesForExport(
-        $service,
-        $classification,
-        $statusFilter,
-        $search
-    );
+        // Récupération des sites selon les filtres (on utilise la même méthode que l'admin)
+        $sites = $processedSiteRepository->findSitesForExport(
+            $service,
+            $classification,
+            $statusFilter,
+            $search
+        );
 
-    // Création du CSV avec BOM UTF-8
-    $handle = fopen('php://temp', 'r+');
-    fwrite($handle, "\xEF\xBB\xBF");
+        // Création du CSV avec BOM UTF-8
+        $handle = fopen('php://temp', 'r+');
+        fwrite($handle, "\xEF\xBB\xBF");
 
-    // En-têtes
-    fputcsv($handle, [
-        'Site', 'Classification', 'Type Trans', 'Max TDD (Mbps)', 'Max FDD (Mbps)',
-        'Trafic Max (Mbps)', 'Capacité TDD (Mbps)', 'Capacité FDD (Mbps)',
-        'Taux Utilisation Global (%)', 'Taux Utilisation TDD (%)', 'Taux Utilisation FDD (%)',
-        'Occurrences', 'Occurrence TDD', 'Occurrence FDD',
-        'Statut (status)', 'État (siteStatus)', 'Service', 'Critique',
-        'DropCong TDD', 'DropCong FDD', 'DropCong TF'
-    ], ';');
-
-    foreach ($sites as $site) {
+        // En-têtes
         fputcsv($handle, [
-            $site->getSiteName(),
-            $site->getClassification() ?? '-',
-            $site->getTypeTrans() ?? '-',
-            $site->getMaxTraficTdd() ?? '-',
-            $site->getMaxTraficFdd() ?? '-',
-            $site->getMaxTrafic() ?? '-',
-            $site->getCapaciteTddMbps() ?? '-',
-            $site->getCapaciteFddMbps() ?? '-',
-            $site->getTauxUtilisation() ?? '-',
-            $site->getTauxUtilisationTdd() ?? '-',
-            $site->getTauxUtilisationFdd() ?? '-',
-            $site->getNombreOccurrences() ?? '-',
-            $site->getNombreOccurrencesTdd() ?? '-',
-            $site->getNombreOccurrencesFdd() ?? '-',
-            $site->getStatus() ?? '-',
-            $site->getSiteStatus() ?? '-',
-            $site->getServiceName() ?? '-',
-            $site->isCritical() ? 'Oui' : 'Non',
-            $site->getDropCongTdd() ?? '-',
-            $site->getDropCongFdd() ?? '-',
-            $site->getDropCongTf() ?? '-',
+            'Site',
+            'Classification',
+            'Type Trans',
+            'Max TDD (Mbps)',
+            'Max FDD (Mbps)',
+            'Trafic Max (Mbps)',
+            'Capacité TDD (Mbps)',
+            'Capacité FDD (Mbps)',
+            'Taux Utilisation Global (%)',
+            'Taux Utilisation TDD (%)',
+            'Taux Utilisation FDD (%)',
+            'Occurrences',
+            'Occurrence TDD',
+            'Occurrence FDD',
+            'Statut (status)',
+            'État (siteStatus)',
+            'Service',
+            'Critique',
+            'DropCong TDD',
+            'DropCong FDD',
+            'DropCong TF'
         ], ';');
-    }
 
-    rewind($handle);
-    $csvContent = stream_get_contents($handle);
-    fclose($handle);
-
-    $filename = 'sites_export_' . date('Y-m-d_His') . '.csv';
-
-    return new Response($csvContent, 200, [
-        'Content-Type' => 'text/csv; charset=utf-8',
-        'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-    ]);
-}
-
-
-#[Route('/superuser/export/generate', name: 'superuser_export_generate', methods: ['POST'])]
-public function exportSites(
-    Request $request,
-    ProcessedSiteRepository $repo
-): Response {
-    $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
-
-    // Récupération des filtres
-    $service = $request->request->get('service_filter');
-    $classification = $request->request->get('classification_filter');
-    $search = $request->request->get('site_search');
-    $periodStart = $request->request->get('period_start');
-    $periodEnd = $request->request->get('period_end');
-    $selectedColumns = $request->request->all('columns', []);
-
-    // Récupération des sites selon les filtres
-    $sites = $repo->findForAdvancedExport(
-        $service && $service !== 'all' ? $service : null,
-        'all',
-        [],
-        $search ?: '',
-        $periodStart ?: null,
-        $periodEnd ?: null
-    );
-
-    // Filtre supplémentaire par classification si précisé
-    if ($classification && $classification !== 'all') {
-        $sites = array_filter($sites, function ($site) use ($classification) {
-            return strtoupper((string) $site->getClassification()) === strtoupper($classification);
-        });
-    }
-
-    // Construction du CSV avec les colonnes sélectionnées
-    return $this->buildCsvResponse($sites, $selectedColumns);
-}
-
-/**
- * Retourne la liste des colonnes disponibles pour l'export.
- */
-private function getAvailableColumns(): array
-{
-    return [
-        'site' => ['label' => 'Site', 'getter' => 'getSiteName'],
-        'classification' => ['label' => 'Classification', 'getter' => 'getClassification'],
-        'typeTrans' => ['label' => 'Type Trans', 'getter' => 'getTypeTrans'],
-        'maxTraficTdd' => ['label' => 'Max TDD (Mbps)', 'getter' => 'getMaxTraficTdd'],
-        'maxTraficFdd' => ['label' => 'Max FDD (Mbps)', 'getter' => 'getMaxTraficFdd'],
-        'maxTrafic' => ['label' => 'Trafic Max (Mbps)', 'getter' => 'getMaxTrafic'],
-        'capaciteTdd' => ['label' => 'Capacité TDD (Mbps)', 'getter' => 'getCapaciteTddMbps'],
-        'capaciteFdd' => ['label' => 'Capacité FDD (Mbps)', 'getter' => 'getCapaciteFddMbps'],
-        'tauxUtilisation' => ['label' => 'Taux Utilisation Global (%)', 'getter' => 'getTauxUtilisation'],
-        'tauxUtilisationTdd' => ['label' => 'Taux Utilisation TDD (%)', 'getter' => 'getTauxUtilisationTdd'],
-        'tauxUtilisationFdd' => ['label' => 'Taux Utilisation FDD (%)', 'getter' => 'getTauxUtilisationFdd'],
-        'nombreOccurrences' => ['label' => 'Occurrences', 'getter' => 'getNombreOccurrences'],
-        'nombreOccurrencesTdd' => ['label' => 'Occurrence TDD', 'getter' => 'getNombreOccurrencesTdd'],
-        'nombreOccurrencesFdd' => ['label' => 'Occurrence FDD', 'getter' => 'getNombreOccurrencesFdd'],
-        'status' => ['label' => 'Statut (status)', 'getter' => 'getStatus'],
-        'siteStatus' => ['label' => 'État (siteStatus)', 'getter' => 'getSiteStatus'],
-        'service' => ['label' => 'Service', 'getter' => 'getServiceName'],
-        'isCritical' => ['label' => 'Critique', 'getter' => 'isCritical'],
-        'dropCongTdd' => ['label' => 'DropCong TDD', 'getter' => 'getDropCongTdd'],
-        'dropCongFdd' => ['label' => 'DropCong FDD', 'getter' => 'getDropCongFdd'],
-        'dropCongTf' => ['label' => 'DropCong TF', 'getter' => 'getDropCongTf'],
-    ];
-}
-
-/**
- * Génère un CSV avec les colonnes sélectionnées.
- */
-private function buildCsvResponse(array $sites, array $selectedColumns = []): Response
-{
-    $availableColumns = $this->getAvailableColumns();
-
-    // Si aucune colonne sélectionnée, on prend toutes par défaut
-    if (empty($selectedColumns)) {
-        $selectedColumns = array_keys($availableColumns);
-    }
-
-    // Filtrer les colonnes valides
-    $selectedColumns = array_intersect($selectedColumns, array_keys($availableColumns));
-
-    $handle = fopen('php://temp', 'r+');
-    fwrite($handle, "\xEF\xBB\xBF"); // BOM pour Excel
-
-    // En-têtes
-    $headers = [];
-    foreach ($selectedColumns as $key) {
-        $headers[] = $availableColumns[$key]['label'];
-    }
-    fputcsv($handle, $headers, ';');
-
-    // Données
-    foreach ($sites as $site) {
-        $row = [];
-        foreach ($selectedColumns as $key) {
-            $getter = $availableColumns[$key]['getter'];
-            $value = $site->$getter();
-
-            // Traitement spécial pour la colonne Critique
-            if ($key === 'isCritical') {
-                $value = $value ? 'Oui' : 'Non';
-            }
-
-            // Si null, on affiche '-'
-            if ($value === null || $value === '') {
-                $value = '-';
-            }
-
-            // Formatage des nombres (sauf booléens)
-            if (is_numeric($value) && !is_bool($value) && $key !== 'isCritical') {
-                $value = number_format((float) $value, 2, '.', '');
-            }
-
-            $row[] = $value;
+        foreach ($sites as $site) {
+            fputcsv($handle, [
+                $site->getSiteName(),
+                $site->getClassification() ?? '-',
+                $site->getTypeTrans() ?? '-',
+                $site->getMaxTraficTdd() ?? '-',
+                $site->getMaxTraficFdd() ?? '-',
+                $site->getMaxTrafic() ?? '-',
+                $site->getCapaciteTddMbps() ?? '-',
+                $site->getCapaciteFddMbps() ?? '-',
+                $site->getTauxUtilisation() ?? '-',
+                $site->getTauxUtilisationTdd() ?? '-',
+                $site->getTauxUtilisationFdd() ?? '-',
+                $site->getNombreOccurrences() ?? '-',
+                $site->getNombreOccurrencesTdd() ?? '-',
+                $site->getNombreOccurrencesFdd() ?? '-',
+                $site->getStatus() ?? '-',
+                $site->getSiteStatus() ?? '-',
+                $site->getServiceName() ?? '-',
+                $site->isCritical() ? 'Oui' : 'Non',
+                $site->getDropCongTdd() ?? '-',
+                $site->getDropCongFdd() ?? '-',
+                $site->getDropCongTf() ?? '-',
+            ], ';');
         }
-        fputcsv($handle, $row, ';');
+
+        rewind($handle);
+        $csvContent = stream_get_contents($handle);
+        fclose($handle);
+
+        $filename = 'sites_export_' . date('Y-m-d_His') . '.csv';
+
+        return new Response($csvContent, 200, [
+            'Content-Type' => 'text/csv; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
     }
 
-    rewind($handle);
-    $csv = stream_get_contents($handle);
-    fclose($handle);
 
-    $filename = 'sites_export_' . date('Y-m-d_His') . '.csv';
+    #[Route('/superuser/export/generate', name: 'superuser_export_generate', methods: ['POST'])]
+    public function exportSites(
+        Request $request,
+        ProcessedSiteRepository $repo
+    ): Response {
+        $this->denyAccessUnlessGranted('ROLE_SUPERUSER');
 
-    return new Response($csv, 200, [
-        'Content-Type' => 'text/csv; charset=UTF-8',
-        'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-    ]);
-}
+        // Récupération des filtres
+        $service = $request->request->get('service_filter');
+        $classification = $request->request->get('classification_filter');
+        $search = $request->request->get('site_search');
+        $periodStart = $request->request->get('period_start');
+        $periodEnd = $request->request->get('period_end');
+        $selectedColumns = $request->request->all('columns', []);
 
+        // Récupération des sites selon les filtres
+        $sites = $repo->findForAdvancedExport(
+            $service && $service !== 'all' ? $service : null,
+            'all',
+            [],
+            $search ?: '',
+            $periodStart ?: null,
+            $periodEnd ?: null
+        );
+
+        // Filtre supplémentaire par classification si précisé
+        if ($classification && $classification !== 'all') {
+            $sites = array_filter($sites, function ($site) use ($classification) {
+                return strtoupper((string) $site->getClassification()) === strtoupper($classification);
+            });
+        }
+
+        // Construction du CSV avec les colonnes sélectionnées
+        return $this->buildCsvResponse($sites, $selectedColumns);
+    }
+
+    /**
+     * Retourne la liste des colonnes disponibles pour l'export.
+     */
+    private function getAvailableColumns(): array
+    {
+        return [
+            'site' => ['label' => 'Site', 'getter' => 'getSiteName'],
+            'classification' => ['label' => 'Classification', 'getter' => 'getClassification'],
+            'typeTrans' => ['label' => 'Type Trans', 'getter' => 'getTypeTrans'],
+            'maxTraficTdd' => ['label' => 'Max TDD (Mbps)', 'getter' => 'getMaxTraficTdd'],
+            'maxTraficFdd' => ['label' => 'Max FDD (Mbps)', 'getter' => 'getMaxTraficFdd'],
+            'maxTrafic' => ['label' => 'Trafic Max (Mbps)', 'getter' => 'getMaxTrafic'],
+            'capaciteTdd' => ['label' => 'Capacité TDD (Mbps)', 'getter' => 'getCapaciteTddMbps'],
+            'capaciteFdd' => ['label' => 'Capacité FDD (Mbps)', 'getter' => 'getCapaciteFddMbps'],
+            'tauxUtilisation' => ['label' => 'Taux Utilisation Global (%)', 'getter' => 'getTauxUtilisation'],
+            'tauxUtilisationTdd' => ['label' => 'Taux Utilisation TDD (%)', 'getter' => 'getTauxUtilisationTdd'],
+            'tauxUtilisationFdd' => ['label' => 'Taux Utilisation FDD (%)', 'getter' => 'getTauxUtilisationFdd'],
+            'nombreOccurrences' => ['label' => 'Occurrences', 'getter' => 'getNombreOccurrences'],
+            'nombreOccurrencesTdd' => ['label' => 'Occurrence TDD', 'getter' => 'getNombreOccurrencesTdd'],
+            'nombreOccurrencesFdd' => ['label' => 'Occurrence FDD', 'getter' => 'getNombreOccurrencesFdd'],
+            'status' => ['label' => 'Statut (status)', 'getter' => 'getStatus'],
+            'siteStatus' => ['label' => 'État (siteStatus)', 'getter' => 'getSiteStatus'],
+            'service' => ['label' => 'Service', 'getter' => 'getServiceName'],
+            'isCritical' => ['label' => 'Critique', 'getter' => 'isCritical'],
+            'dropCongTdd' => ['label' => 'DropCong TDD', 'getter' => 'getDropCongTdd'],
+            'dropCongFdd' => ['label' => 'DropCong FDD', 'getter' => 'getDropCongFdd'],
+            'dropCongTf' => ['label' => 'DropCong TF', 'getter' => 'getDropCongTf'],
+        ];
+    }
+
+    /**
+     * Génère un CSV avec les colonnes sélectionnées.
+     */
+    private function buildCsvResponse(array $sites, array $selectedColumns = []): Response
+    {
+        $availableColumns = $this->getAvailableColumns();
+
+        // Si aucune colonne sélectionnée, on prend toutes par défaut
+        if (empty($selectedColumns)) {
+            $selectedColumns = array_keys($availableColumns);
+        }
+
+        // Filtrer les colonnes valides
+        $selectedColumns = array_intersect($selectedColumns, array_keys($availableColumns));
+
+        $handle = fopen('php://temp', 'r+');
+        fwrite($handle, "\xEF\xBB\xBF"); // BOM pour Excel
+
+        // En-têtes
+        $headers = [];
+        foreach ($selectedColumns as $key) {
+            $headers[] = $availableColumns[$key]['label'];
+        }
+        fputcsv($handle, $headers, ';');
+
+        // Données
+        foreach ($sites as $site) {
+            $row = [];
+            foreach ($selectedColumns as $key) {
+                $getter = $availableColumns[$key]['getter'];
+                $value = $site->$getter();
+
+                // Traitement spécial pour la colonne Critique
+                if ($key === 'isCritical') {
+                    $value = $value ? 'Oui' : 'Non';
+                }
+
+                // Si null, on affiche '-'
+                if ($value === null || $value === '') {
+                    $value = '-';
+                }
+
+                // Formatage des nombres (sauf booléens)
+                if (is_numeric($value) && !is_bool($value) && $key !== 'isCritical') {
+                    $value = number_format((float) $value, 2, '.', '');
+                }
+
+                $row[] = $value;
+            }
+            fputcsv($handle, $row, ';');
+        }
+
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+
+        $filename = 'sites_export_' . date('Y-m-d_His') . '.csv';
+
+        return new Response($csv, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
 }

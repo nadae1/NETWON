@@ -105,6 +105,21 @@ class ProcessedSite
     #[ORM\Column(name: 'dropcong_tf', type: 'integer', nullable: true)]
     private ?int $dropCongTf = null;
 
+    /**
+     * ✅ NOUVEAU : durée maximale (en secondes) d'indisponibilité du lien
+     * S1 mesurée pour ce site (colonne L.Cell.Unavail.Dur.Sys.S1Fail(s)
+     * du fichier trafic). > 0 signifie qu'aucun trafic ne transite
+     * réellement entre le site et l'eNodeB pendant la période concernée.
+     */
+    #[ORM\Column(name: 's1_fail_duration', type: 'float', nullable: true)]
+    private ?float $s1FailDuration = null;
+
+    /**
+     * ✅ NOUVEAU : date/heure de la dernière coupure S1 détectée.
+     */
+    #[ORM\Column(name: 's1_fail_date', type: 'datetime', nullable: true)]
+    private ?\DateTimeInterface $s1FailDate = null;
+
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $latitude = null;
 
@@ -126,23 +141,38 @@ class ProcessedSite
     #[ORM\Column(name: 'capacity_reminder_until', type: 'datetime', nullable: true)]
     private ?\DateTimeInterface $capacityReminderUntil = null;
 
-    /**
-     * ✅ NOUVEAU : date de la dernière mise à jour de capacité effectuée
-     * manuellement ou via import (capacite.py, validation superuser,
-     * complétion Plan Data). Reste NULL tant que la capacité déclarée
-     * n'a jamais été (re)touchée après le traitement trafic initial.
-     */
     #[ORM\Column(name: 'capacite_updated_at', type: 'datetime', nullable: true)]
     private ?\DateTimeInterface $capaciteUpdatedAt = null;
 
-    /**
-     * ✅ NOUVEAU : libellé de la dernière action réellement effectuée sur
-     * ce site (ex: "Upgrade capacité FDD", "Swap TF", "Import capacité
-     * (FH)"...), distinct de recommendedAction/finalActionPlan qui sont
-     * la recommandation IA -- ce champ trace ce qui a VRAIMENT été fait.
-     */
     #[ORM\Column(name: 'last_action_performed', length: 255, nullable: true)]
     private ?string $lastActionPerformed = null;
+
+    public function getS1FailDuration(): ?float
+    {
+        return $this->s1FailDuration;
+    }
+
+    public function setS1FailDuration(?float $s1FailDuration): static
+    {
+        $this->s1FailDuration = $s1FailDuration;
+        return $this;
+    }
+
+    public function getS1FailDate(): ?\DateTimeInterface
+    {
+        return $this->s1FailDate;
+    }
+
+    public function setS1FailDate(?\DateTimeInterface $s1FailDate): static
+    {
+        $this->s1FailDate = $s1FailDate;
+        return $this;
+    }
+
+    public function isS1Down(): bool
+    {
+        return $this->s1FailDuration !== null && $this->s1FailDuration > 0;
+    }
 
     public function getCapaciteUpdatedAt(): ?\DateTimeInterface
     {

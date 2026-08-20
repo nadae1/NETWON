@@ -8,7 +8,15 @@
     <div class="card mb-10">
         <div class="card-header">
             <h3 class="card-title">📊 Import global des sites</h3>
-            <p class="card-desc">Fichiers contenant les données de trafic, ports et types de liaison (tous services confondus).</p>
+            <p class="card-desc">
+                Fichier trafic unique attendu avec les colonnes suivantes :
+                <code>Time</code>, <code>eNodeB Name</code>, <code>Integrity</code>,
+                <code>L.Cell.Unavail.Dur.Sys.S1Fail(s)</code>,
+                <code>VS.FEGE.RxMaxSpeed_Mbs(Mbit/s)</code>,
+                <code>VS.RscGroup.FlowCtrol.DL.DropCong.DownBWNum</code>.
+                Le trafic, le KPI DropCong et le KPI d'indisponibilité S1 sont désormais
+                extraits automatiquement de ce même fichier — plus besoin d'un fichier séparé.
+            </p>
         </div>
         <div class="card-body">
             <form method="post" action="{{ path('superuser_data_import_process') }}" enctype="multipart/form-data" class="import-form">
@@ -16,7 +24,7 @@
                     <div class="form-group">
                         <label>Fichier Traffic <span class="required">*</span></label>
                         <input type="file" name="trafic_file" accept=".xlsx,.xls,.csv" required>
-                        <small>Données de trafic (obligatoire)</small>
+                        <small>Données de trafic + DropCong + indisponibilité S1 (obligatoire)</small>
                     </div>
                     <div class="form-group">
                         <label>Fichier Ports</label>
@@ -68,26 +76,30 @@
         </div>
     </div>
 
-    {# ========== BLOC DROPCONG (UN SEUL FICHIER) ========== #}
-    <div class="card">
+    {# ✅ Bloc DropCong conservé uniquement pour compatibilité/legacy :
+       le KPI DropCong (VS.RscGroup.FlowCtrol.DL.DropCong.DownBWNum) est
+       désormais lu automatiquement depuis le fichier Trafic ci-dessus.
+       Cet import séparé n'est plus nécessaire dans le flux normal. #}
+    <div class="card" style="opacity:0.85;">
         <div class="card-header">
-            <h3 class="card-title">📉 Importer les KPIs DropCong</h3>
+            <h3 class="card-title">📉 Importer les KPIs DropCong (legacy, optionnel)</h3>
             <p class="card-desc">
-                Fichier contenant les indicateurs de Drop Congestion (IUB / RscGroup).
-                Une seule feuille ou un seul fichier est attendu.
+                ⚠️ Le KPI DropCong est maintenant extrait automatiquement du fichier Trafic
+                (colonne VS.RscGroup.FlowCtrol.DL.DropCong.DownBWNum). Cet import séparé
+                n'est conservé que pour un usage exceptionnel/rétro-compatibilité.
             </p>
         </div>
         <div class="card-body">
             <form method="post" action="{{ path('superuser_import_dropcong') }}" enctype="multipart/form-data">
                 <div class="form-grid" style="grid-template-columns: 1fr;">
                     <div class="form-group">
-                        <label>Fichier DropCong <span class="required">*</span></label>
-                        <input type="file" name="fichier" accept=".xlsx,.xls,.csv" required>
-                        <small>Fichier Excel ou CSV contenant les colonnes nécessaires (ex: NODEBNAME, VS.IUB.FlowCtrol.DL.DropCong.DownBWNum.LgcPort1, etc.)</small>
+                        <label>Fichier DropCong</label>
+                        <input type="file" name="fichier" accept=".xlsx,.xls,.csv">
+                        <small>Optionnel — uniquement si vous devez recalculer le DropCong indépendamment du prochain import trafic.</small>
                     </div>
                 </div>
                 <div class="form-actions">
-                    <button type="submit" class="btn-secondary">📤 Importer DropCong</button>
+                    <button type="submit" class="btn-secondary">📤 Importer DropCong (legacy)</button>
                 </div>
             </form>
         </div>
@@ -103,6 +115,7 @@
 .card-header { padding: 24px 28px 0 28px; }
 .card-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; color: #0f172a; }
 .card-desc { color: #64748b; font-size: 14px; }
+.card-desc code { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
 .card-body { padding: 24px 28px 28px 28px; }
 .form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 30px; }
 .form-group label { display: block; font-weight: 600; margin-bottom: 8px; color: #1e293b; }

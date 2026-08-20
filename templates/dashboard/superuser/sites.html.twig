@@ -81,6 +81,8 @@
                         <th style="white-space: nowrap;">Drop TDD</th>
                         <th style="white-space: nowrap;">Drop FDD</th>
                         <th style="white-space: nowrap;">Drop TF</th>
+                        <th style="white-space: nowrap;">S1 Fail (s)</th>
+                        <th style="white-space: nowrap;">Date coupure S1</th>
                         <th style="white-space: nowrap;">MAJ Capacité</th>
                         <th style="white-space: nowrap;">Dernière action</th>
                     </tr>
@@ -120,10 +122,16 @@
                             <td>{{ site.dropCongTdd is not null ? site.dropCongTdd : '-' }}</td>
                             <td>{{ site.dropCongFdd is not null ? site.dropCongFdd : '-' }}</td>
                             <td>{{ site.dropCongTf is not null ? site.dropCongTf : '-' }}</td>
-                            {# ✅ NOUVEAU : ces 2 colonnes restent vides ('-')
-                               tant que le site n'a jamais fait l'objet
-                               d'une mise à jour de capacité manuelle ou
-                               via import capacité séparé. #}
+                            <td>
+                                {% if site.s1FailDuration is not null and site.s1FailDuration > 0 %}
+                                    <span class="badge s1down">{{ site.s1FailDuration|number_format(0, '.', ' ') }}s</span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {{ site.s1FailDate ? site.s1FailDate|date('d/m/Y H:i') : '-' }}
+                            </td>
                             <td>
                                 {% if site.capaciteUpdatedAt %}
                                     <span class="badge blue-soft">{{ site.capaciteUpdatedAt|date('d/m/Y H:i') }}</span>
@@ -141,7 +149,7 @@
                         </tr>
                     {% else %}
                         <tr>
-                            <td colspan="21" class="empty-state">Aucun site trouvé</td>
+                            <td colspan="23" class="empty-state">Aucun site trouvé</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -285,6 +293,7 @@
 .badge.green { background: #dcfce7; color: #16a34a; }
 .badge.gray { background: #f1f5f9; color: #64748b; }
 .badge.blue-soft { background: #eff6ff; color: #1d4ed8; border-radius: 8px; padding: 3px 8px; font-weight: 600; font-size: 12px; }
+.badge.s1down { background: #450a0a; color: #fecaca; border-radius: 8px; padding: 3px 8px; font-weight: 700; font-size: 12px; }
 
 .workflow-table {
     font-size: 12px;

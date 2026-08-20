@@ -5,20 +5,11 @@ namespace App\Service;
 use App\Entity\ProcessedSite;
 
 /**
- * ✅ NOUVEAU : centralise la state-machine de calcul d'état/statut d'un
- * ProcessedSite (état, siteStatus, isCritical, taux d'utilisation, action
- * recommandée), reproduite fidèlement depuis
- * api_python/traitement.py::calculer_etat_avance().
- *
- * TOUS les points d'entrée qui modifient une capacité ou un type de
- * liaison après le traitement trafic initial (import capacité séparé,
- * validation superuser, complétion manuelle d'un site, demande de MAJ
- * validée) DOIVENT utiliser ce service plutôt que de recalculer l'état
- * eux-mêmes. Avant cette factorisation, la logique était dupliquée (et
- * divergente) entre trois contrôleurs différents -- source directe des
- * incohérences d'état/statut observées.
- *
- * ⚠️ Les seuils DOIVENT rester synchronisés avec traitement.py.
+ * ✅ ÉTENDU : prise en compte du KPI d'indisponibilité S1
+ * (L.Cell.Unavail.Dur.Sys.S1Fail(s)). Si s1FailDuration > 0, l'état
+ * COUPURE_S1 prend systématiquement la priorité sur tout calcul de
+ * congestion/bridage, y compris lors des recalculs déclenchés après une
+ * mise à jour de capacité ou de type de liaison.
  */
 class SiteStateCalculatorService
 {
@@ -27,7 +18,7 @@ class SiteStateCalculatorService
     private const SEUIL_OCCURRENCES_RISQUE_CONGESTION = 57;
     private const CAPACITE_10G_MBPS = 10000.0;
 
-    public const ETATS_CRITIQUES = ['CONGESTION', 'CONGESTION(FDD)', 'CONGESTION(TDD)', 'BRIDAGE'];
+    public const ETATS_CRITIQUES = ['CONGESTION', 'CONGESTION(FDD)', 'CONGESTION(TDD)', 'BRIDAGE', 'COUPURE_S1'];
 
     public function isMissingType(?string $type): bool
     {
@@ -35,12 +26,6 @@ class SiteStateCalculatorService
         return $t === '' || in_array($t, ['NON_DEFINI', 'UNKNOWN', 'N/A', 'NA', '-'], true);
     }
 
-    /**
-     * Recalcule et applique status / siteStatus / isCritical / taux* et
-     * la recommandation associée, à partir des valeurs de trafic /
-     * capacité / occurrences ACTUELLES du site (déjà mises à jour par
-     * l'appelant avant d'invoquer cette méthode). Ne fait pas de flush.
-     */
     public function recalculer(ProcessedSite $site): void
     {
         $classification = strtoupper(trim((string) $site->getClassification()));
@@ -58,6 +43,8 @@ class SiteStateCalculatorService
         $occTdd = (int) ($site->getNombreOccurrencesTdd() ?? 0);
         $occFdd = (int) ($site->getNombreOccurrencesFdd() ?? 0);
 
+        $s1FailDuration = (float) ($site->getS1FailDuration() ?? 0);
+
         $tauxTdd = ($capaciteTdd > 0 && $maxTraficTdd > 0)
             ? round(($maxTraficTdd / $capaciteTdd) * 100, 2) : null;
         $tauxFdd = ($capaciteFdd > 0 && $maxTraficFdd > 0)
@@ -66,7 +53,14 @@ class SiteStateCalculatorService
         $tauxGlobal = null;
         $etat = 'OK';
 
-        if (in_array($classification, ['COTRANS', 'NO_COTRANS'], true)) {
+        if ($s1FailDuration > 0) {
+            // ✅ Priorité absolue : coupure S1 détectée, aucun trafic ne
+            // transite réellement -- on ne cherche pas à calculer un taux
+            // de congestion qui n'aurait pas de sens.
+            $etat = 'COUPURE_S1';
+            $tauxGlobal = $capaciteGlobale > 0 && $maxTrafic > 0
+                ? round(($maxTrafic / $capaciteGlobale) * 100, 2) : null;
+        } elseif (in_array($classification, ['COTRANS', 'NO_COTRANS'], true)) {
             $tauxGlobal = null;
 
             $fddCongest = ($tauxFdd ?? 0) >= self::SEUIL_CONGESTION_PCT && $occFdd >= self::SEUIL_OCCURRENCES_RISQUE_CONGESTION;
@@ -148,6 +142,10 @@ class SiteStateCalculatorService
         $actionLabel = 'Maintenir sous surveillance';
 
         switch ($etatSite) {
+            case 'COUPURE_S1':
+                $actionType = 'URGENT_S1_CHECK';
+                $actionLabel = 'Verifier immediatement la liaison S1 (coupure detectee)';
+                break;
             case 'CONGESTION':
                 $actionType = 'URGENT_UPGRADE';
                 $actionLabel = 'Upgrade urgent de capacite';
