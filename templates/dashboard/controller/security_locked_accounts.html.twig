@@ -1,0 +1,48 @@
+{# templates/dashboard/controller/security_locked_accounts.html.twig #}
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="dashboard-home dashboard-home--controller">
+    <div class="dashboard-home-toolbar">
+        <div>
+            <h1 class="page-title">Comptes verrouillés</h1>
+            <div class="page-subtitle">{{ lockedUsers|length }} compte(s) actuellement verrouillé(s)</div>
+        </div>
+    </div>
+
+    <div class="card">
+        {% if lockedUsers is empty %}
+            <div class="empty-state">Aucun compte verrouillé actuellement.</div>
+        {% else %}
+            <div class="table-like">
+                <div class="table-row table-row-head">
+                    <div>Username</div>
+                    <div>Email</div>
+                    <div>Raison</div>
+                    <div>Verrouillé depuis</div>
+                    <div>Action</div>
+                </div>
+                {% for user in lockedUsers %}
+                    <div class="table-row">
+                        <div>
+                            <a href="{{ path('controller_security_user_activity', {id: user.id}) }}">
+                                <strong>{{ user.username }}</strong>
+                            </a>
+                        </div>
+                        <div>{{ user.email ?: '-' }}</div>
+                        <div>{{ user.lockReason ?: '-' }}</div>
+                        <div>{{ user.lockedAt ? user.lockedAt|date('d/m/Y H:i:s') : '-' }}</div>
+                        <div>
+                            <form method="post" action="{{ path('controller_security_unlock_account', {id: user.id}) }}" style="display:inline;">
+                                <button type="submit" class="btn-secondary" onclick="return confirm('Déverrouiller ce compte ?');">
+                                    🔓 Déverrouiller
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -226,6 +226,22 @@
             color: #fff !important;
         }
 
+        /* === Security badge (sidebar) === */
+        .nav-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 20px;
+            height: 20px;
+            padding: 0 6px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .badge.red { background: #fee2e2; color: #991b1b; }
+        .badge.orange { background: #ffedd5; color: #9a3412; }
+        .badge.blue { background: #dbeafe; color: #1e40af; }
+
         @media (max-width: 1024px) {
             .topbar-inner {
                 overflow-x: auto;
@@ -354,6 +370,25 @@
                     <i class="fa-solid fa-file-lines"></i>
                     <span>Logs</span>
                 </a>
+
+                <div class="controller-sidebar__section">Sécurité</div>
+                <a href="{{ path('controller_security_dashboard') }}" class="controller-nav-link {{ currentRoute starts with 'controller_security' ? 'active' : '' }}">
+                    <i class="fa-solid fa-shield-halved"></i>
+                    <span>Vue d'ensemble</span>
+                    <span id="sidebar-security-badge" class="badge red nav-badge" style="display:none; margin-left:auto;"></span>
+                </a>
+                <a href="{{ path('controller_security_events') }}" class="controller-nav-link controller-nav-link--child {{ currentRoute == 'controller_security_events' ? 'active' : '' }}">
+                    <i class="fa-solid fa-list-check"></i>
+                    <span>Tous les événements</span>
+                </a>
+<a href="{{ path('controller_security_blocked_ips') }}" class="controller-nav-link controller-nav-link--child {{ currentRoute == 'controller_security_blocked_ips' ? 'active' : '' }}">
+    <i class="fa-solid fa-ban"></i>
+    <span>IPs bannies</span>
+</a>
+<a href="{{ path('controller_security_locked_accounts') }}" class="controller-nav-link controller-nav-link--child {{ currentRoute == 'controller_security_locked_accounts' ? 'active' : '' }}">
+    <i class="fa-solid fa-user-lock"></i>
+    <span>Comptes verrouillés</span>
+</a>
             </aside>
 
             <main class="controller-main content-wrap">
@@ -396,6 +431,37 @@
         </main>
     {% endif %}
 </div>
+
+{% if isControllerArea %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const badge = document.getElementById('sidebar-security-badge');
+    if (!badge) return;
+
+    function refreshBadge() {
+        fetch("{{ path('controller_security_alerts_count') }}", { credentials: 'same-origin' })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                if (data.total > 0) {
+                    badge.textContent = data.total;
+                    badge.style.display = 'inline-flex';
+                } else {
+                    badge.style.display = 'none';
+                }
+            })
+            .catch(function (err) {
+                console.error('Erreur lors du rafraîchissement des alertes sécurité :', err);
+            });
+    }
+
+    refreshBadge();
+    setInterval(refreshBadge, 30000); // toutes les 30 secondes
+});
+</script>
+{% endif %}
 
 {% if is_granted('ROLE_SUPERUSER') %}
 <div id="capacity-popup" class="capacity-popup-overlay" style="display:none;">

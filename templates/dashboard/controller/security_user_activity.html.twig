@@ -1,0 +1,64 @@
+{# templates/dashboard/controller/security_user_activity.html.twig #}
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="dashboard-home dashboard-home--controller">
+    <div class="dashboard-home-toolbar">
+        <div>
+            <h1 class="page-title">Activité de {{ managedUser.username }}</h1>
+            <div class="page-subtitle">{{ managedUser.email ?: '-' }} — {{ managedUser.service ?: '-' }}</div>
+        </div>
+        <div class="dashboard-home-actions">
+            {% if managedUser.roles is defined and 'ROLE_USER' in managedUser.roles %}
+                <a href="{{ path('controller_user_edit', {id: managedUser.id}) }}" class="btn-secondary">Modifier le compte</a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if managedUser.isLocked %}
+        <div class="card" style="padding: 16px; margin-bottom: 20px; border: 1px solid #fecaca; background: #fef2f2;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+                <div>
+                    <strong style="color:#991b1b;">🔒 Compte verrouillé</strong>
+                    <div style="color:#991b1b; font-size:14px; margin-top:4px;">
+                        {{ managedUser.lockReason ?: 'Aucune raison précisée.' }}
+                    </div>
+                    <div style="color:#991b1b; font-size:12px; margin-top:2px;">
+                        Depuis le {{ managedUser.lockedAt ? managedUser.lockedAt|date('d/m/Y H:i:s') : '-' }}
+                    </div>
+                </div>
+                <form method="post" action="{{ path('controller_security_unlock_account', {id: managedUser.id}) }}">
+                    <button type="submit" class="btn-primary" onclick="return confirm('Déverrouiller ce compte ?');">
+                        🔓 Déverrouiller le compte
+                    </button>
+                </form>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="card">
+        {% if events is empty %}
+            <div class="empty-state">Aucun événement de sécurité enregistré pour cet utilisateur.</div>
+        {% else %}
+            <div class="table-like">
+                <div class="table-row table-row-head">
+                    <div>Type</div>
+                    <div>Sévérité</div>
+                    <div>IP</div>
+                    <div>Route</div>
+                    <div>Date</div>
+                </div>
+                {% for event in events %}
+                    <div class="table-row">
+                        <div>{{ event.type }}</div>
+                        <div>{{ event.severity }}</div>
+                        <div>{{ event.ipAddress }}</div>
+                        <div>{{ event.route ?: '-' }}</div>
+                        <div>{{ event.createdAt|date('d/m/Y H:i:s') }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

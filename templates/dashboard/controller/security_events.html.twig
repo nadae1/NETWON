@@ -1,0 +1,128 @@
+{# templates/dashboard/controller/security_events.html.twig #}
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="dashboard-home dashboard-home--controller">
+    <div class="dashboard-home-toolbar">
+        <div>
+            <h1 class="page-title">Tous les événements de sécurité</h1>
+            <div class="page-subtitle">{{ total }} résultat(s)</div>
+        </div>
+    </div>
+<div style="margin: 12px 0;">
+    <a href="{{ path('controller_security_events_export', {
+        type: currentType,
+        severity: currentSeverity,
+        resolved: currentResolved
+    }) }}" class="btn-secondary">
+        <i class="fa-solid fa-file-csv"></i> Exporter en CSV
+    </a>
+</div>
+
+    <div class="card" style="padding: 16px; margin-bottom: 20px;">
+        <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+            <div>
+                <label style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;">Type</label>
+                <select name="type">
+                    <option value="">Tous</option>
+                    {% for type in types %}
+                        <option value="{{ type }}" {{ currentType == type ? 'selected' : '' }}>{{ type }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;">Sévérité</label>
+                <select name="severity">
+                    <option value="">Toutes</option>
+                    {% for severity in severities %}
+                        <option value="{{ severity }}" {{ currentSeverity == severity ? 'selected' : '' }}>{{ severity }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;">Statut</label>
+                <select name="resolved">
+                    <option value="">Tous</option>
+                    <option value="0" {{ currentResolved == '0' ? 'selected' : '' }}>Non traité</option>
+                    <option value="1" {{ currentResolved == '1' ? 'selected' : '' }}>Traité</option>
+                </select>
+            </div>
+            <button type="submit" class="btn-primary">Filtrer</button>
+            <a href="{{ path('controller_security_events') }}" class="btn-secondary">Réinitialiser</a>
+        </form>
+    </div>
+
+    <div class="card">
+        {% if events is empty %}
+            <div class="empty-state">Aucun événement ne correspond à ces filtres.</div>
+        {% else %}
+            <div class="table-like">
+                <div class="table-row table-row-head">
+                    <div>Type</div>
+                    <div>Sévérité</div>
+                    <div>Identifiant / IP</div>
+                    <div>Route</div>
+                    <div>Statut</div>
+                    <div>Date</div>
+                    <div>Action</div>
+                </div>
+                {% for event in events %}
+                    <div class="table-row">
+                        <div>{{ event.type }}</div>
+                        <div>
+                            <span class="badge {{ event.severity == 'CRITICAL' ? 'red' : (event.severity == 'HIGH' ? 'orange' : 'blue') }}">
+                                {{ event.severity }}
+                            </span>
+                        </div>
+                        <div>
+                            {% if event.user %}
+                                <a href="{{ path('controller_security_user_activity', {id: event.user.id}) }}">{{ event.user.username }}</a>
+                            {% else %}
+                                {{ event.attemptedIdentifier ?: event.ipAddress }}
+                            {% endif %}
+                        </div>
+                        <div>{{ event.route ?: '-' }}</div>
+                        <div>{{ event.resolved ? 'Traité' : 'En attente' }}</div>
+                        <div>{{ event.createdAt|date('d/m/Y H:i:s') }}</div>
+                        <div>
+                            {% if not event.resolved %}
+{# Remplace CETTE partie dans security_dashboard.html.twig ET security_events.html.twig #}
+<div>
+    <form method="post" action="{{ path('controller_security_event_resolve', {id: event.id}) }}" style="display:inline;">
+        <button type="submit" class="btn-secondary">Marquer traité</button>
+    </form>
+
+    {% if event.ipAddress %}
+        <form method="post" action="{{ path('controller_security_ban_ip', {id: event.id}) }}" style="display:inline;">
+            <button type="submit" class="btn-secondary" onclick="return confirm('Bannir l\'adresse {{ event.ipAddress }} ?');">
+                🚫 Bannir IP
+            </button>
+        </form>
+    {% endif %}
+
+    {% if event.type in ['LOGIN_FAILED', 'BRUTE_FORCE'] %}
+        <form method="post" action="{{ path('controller_security_lock_account', {id: event.id}) }}" style="display:inline;">
+            <button type="submit" class="btn-secondary" onclick="return confirm('Verrouiller le compte associé ?');">
+                🔒 Verrouiller compte
+            </button>
+        </form>
+    {% endif %}
+</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            {% if totalPages > 1 %}
+                <div style="display:flex; gap:8px; margin-top:16px; justify-content:center;">
+                    {% for p in 1..totalPages %}
+                        <a href="{{ path('controller_security_events', {type: currentType, severity: currentSeverity, resolved: currentResolved, page: p}) }}"
+                           class="btn-secondary {{ p == page ? 'active' : '' }}">{{ p }}</a>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

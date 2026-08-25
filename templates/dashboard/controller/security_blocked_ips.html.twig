@@ -1,0 +1,42 @@
+{# templates/dashboard/controller/security_blocked_ips.html.twig #}
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="dashboard-home dashboard-home--controller">
+    <div class="dashboard-home-toolbar">
+        <div>
+            <h1 class="page-title">Adresses IP bannies</h1>
+            <div class="page-subtitle">{{ blockedIps|length }} adresse(s) actuellement bloquée(s)</div>
+        </div>
+    </div>
+
+    <div class="card">
+        {% if blockedIps is empty %}
+            <div class="empty-state">Aucune adresse IP bannie actuellement.</div>
+        {% else %}
+            <div class="table-like">
+                <div class="table-row table-row-head">
+                    <div>Adresse IP</div>
+                    <div>Raison</div>
+                    <div>Banni par</div>
+                    <div>Date</div>
+                    <div>Action</div>
+                </div>
+                {% for blockedIp in blockedIps %}
+                    <div class="table-row">
+                        <div><strong>{{ blockedIp.ipAddress }}</strong></div>
+                        <div>{{ blockedIp.reason ?: '-' }}</div>
+                        <div>{{ blockedIp.blockedBy ? blockedIp.blockedBy.username : 'Système' }}</div>
+                        <div>{{ blockedIp.createdAt|date('d/m/Y H:i:s') }}</div>
+                        <div>
+                            <form method="post" action="{{ path('controller_security_unblock_ip', {ip: blockedIp.ipAddress}) }}" style="display:inline;">
+                                <button type="submit" class="btn-secondary" onclick="return confirm('Débloquer cette adresse IP ?');">Débloquer</button>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

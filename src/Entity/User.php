@@ -53,6 +53,15 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'datetime', nullable: true)]
     private ?\DateTimeInterface $resetCodeExpiresAt = null;
 
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    private bool $isLocked = false;
+
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?\DateTimeImmutable $lockedAt = null;
+
+    #[ORM\Column(type: 'string', length: 255, nullable: true)]
+    private ?string $lockReason = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -156,5 +165,39 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function getFullName(): string
     {
         return $this->username ?? $this->email ?? 'Utilisateur';
+    }
+
+
+    public function isLocked(): bool
+    {
+        return $this->isLocked;
+    }
+
+    public function setLocked(bool $isLocked): static
+    {
+        $this->isLocked = $isLocked;
+        return $this;
+    }
+
+    public function getLockedAt(): ?\DateTimeImmutable
+    {
+        return $this->lockedAt;
+    }
+
+    public function setLockedAt(?\DateTimeImmutable $lockedAt): static
+    {
+        $this->lockedAt = $lockedAt;
+        return $this;
+    }
+
+    public function getLockReason(): ?string
+    {
+        return $this->lockReason;
+    }
+
+    public function setLockReason(?string $lockReason): static
+    {
+        $this->lockReason = $lockReason;
+        return $this;
     }
 }

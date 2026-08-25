@@ -1,6 +1,10 @@
 parameters:
     ticket_proofs_directory: '%kernel.project_dir%/public/uploads/ticket_proofs'
     cron_token: '%env(CRON_TOKEN)%'
+    security_ip_whitelist:
+        - '127.0.0.1'
+        - '::1'
+        - 'localhost'
 
 
 services:
@@ -27,4 +31,6 @@ services:
         tags:
             - { name: doctrine.event_listener, event: postPersist }
             - { name: doctrine.event_listener, event: postUpdate }
-    
+    App\Service\Security\IpBlocklistService:
+        arguments:
+            $ipWhitelist: '%security_ip_whitelist%'

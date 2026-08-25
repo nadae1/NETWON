@@ -1,0 +1,135 @@
+{# templates/dashboard/controller/security_dashboard.html.twig #}
+{% extends 'dashboard/base_dashboard.html.twig' %}
+
+{% block dashboard_content %}
+<div class="dashboard-home dashboard-home--controller">
+    <div class="dashboard-home-toolbar">
+        <div>
+            <h1 class="page-title">Sécurité de la plateforme</h1>
+            <div class="page-subtitle">Détection des tentatives d'intrusion et anomalies</div>
+        </div>
+        <div class="dashboard-home-actions">
+            <a href="{{ path('controller_security_events') }}" class="btn-secondary">Tous les événements</a>
+        </div>
+<div class="dashboard-home-actions">
+    <a href="{{ path('controller_security_events') }}" class="btn-secondary">Tous les événements</a>
+    <a href="{{ path('controller_security_stats_export') }}" class="btn-secondary">
+        <i class="fa-solid fa-file-csv"></i> Exporter les statistiques
+    </a>
+</div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card stat-red with-top-accent">
+            <div>
+                <div class="stat-label">Alertes critiques (non traitées)</div>
+                <div class="stat-value">{{ unresolvedBySeverity['CRITICAL'] }}</div>
+                <div class="stat-small">Brute-force, injections détectées</div>
+            </div>
+            <div class="stat-icon icon-red">🚨</div>
+        </div>
+
+        <div class="stat-card stat-orange with-top-accent">
+            <div>
+                <div class="stat-label">Alertes élevées (non traitées)</div>
+                <div class="stat-value">{{ unresolvedBySeverity['HIGH'] }}</div>
+                <div class="stat-small">Accès refusés suspects</div>
+            </div>
+            <div class="stat-icon icon-orange">⚠️</div>
+        </div>
+
+        <div class="stat-card stat-blue with-top-accent">
+            <div>
+                <div class="stat-label">Événements (24h)</div>
+                <div class="stat-value">{{ countsLast24h|reduce((carry, v) => carry + v, 0) }}</div>
+                <div class="stat-small">Tous types confondus</div>
+            </div>
+            <div class="stat-icon icon-blue">📊</div>
+        </div>
+
+        <div class="stat-card stat-green with-top-accent">
+            <div>
+                <div class="stat-label">Événements (7 jours)</div>
+                <div class="stat-value">{{ countsLast7d|reduce((carry, v) => carry + v, 0) }}</div>
+                <div class="stat-small">Tendance hebdomadaire</div>
+            </div>
+            <div class="stat-icon icon-green">📈</div>
+        </div>
+    </div>
+
+    <div class="charts-grid">
+        <div class="chart-card">
+            <div class="chart-title">Répartition par type (24 dernières heures)</div>
+            <div class="table-like">
+                <div class="table-row table-row-head">
+                    <div>Type</div>
+                    <div>Occurrences</div>
+                </div>
+                {% for type, count in countsLast24h %}
+                    {% if count > 0 %}
+                        <div class="table-row">
+                            <div><strong>{{ type }}</strong></div>
+                            <div>{{ count }}</div>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title">Alertes à traiter en priorité</div>
+
+            {% if recentAlerts is empty %}
+                <div class="empty-state">Aucune alerte critique ou élevée en attente. 👍</div>
+            {% else %}
+                <div class="table-like">
+                    <div class="table-row table-row-head">
+                        <div>Type</div>
+                        <div>Sévérité</div>
+                        <div>Identifiant / IP</div>
+                        <div>Date</div>
+                        <div>Action</div>
+                    </div>
+                    {% for event in recentAlerts %}
+                        <div class="table-row">
+                            <div><strong>{{ event.type }}</strong></div>
+                            <div>
+                                <span class="badge {{ event.severity == 'CRITICAL' ? 'red' : 'orange' }}">{{ event.severity }}</span>
+                            </div>
+                            <div>{{ event.attemptedIdentifier ?: event.ipAddress }}</div>
+                            <div>{{ event.createdAt|date('d/m/Y H:i:s') }}</div>
+                            <div>
+                                <form method="post" action="{{ path('controller_security_event_resolve', {id: event.id}) }}" style="display:inline;">
+                                    <button type="submit" class="btn-secondary">Marquer traité</button>
+                                </form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="chart-card" style="margin-top: 24px;">
+        <div class="chart-title">Derniers événements (toutes sévérités)</div>
+        <div class="table-like">
+            <div class="table-row table-row-head">
+                <div>Type</div>
+                <div>Sévérité</div>
+                <div>Identifiant / IP</div>
+                <div>Route</div>
+                <div>Date</div>
+            </div>
+            {% for event in recentEvents %}
+                <div class="table-row">
+                    <div>{{ event.type }}</div>
+                    <div>{{ event.severity }}</div>
+                    <div>{{ event.attemptedIdentifier ?: event.ipAddress }}</div>
+                    <div>{{ event.route ?: '-' }}</div>
+                    <div>{{ event.createdAt|date('d/m/Y H:i:s') }}</div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
